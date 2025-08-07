@@ -52,6 +52,18 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				configurator: {
+					bg: 'hsl(var(--configurator-bg))',
+					panel: 'hsl(var(--configurator-panel))',
+					border: 'hsl(var(--configurator-border))'
+				},
+				feature: {
+					selected: 'hsl(var(--feature-selected))',
+					hover: 'hsl(var(--feature-hover))'
+				},
+				price: {
+					accent: 'hsl(var(--price-accent))'
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
