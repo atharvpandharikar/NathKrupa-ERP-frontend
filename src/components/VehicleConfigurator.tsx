@@ -90,12 +90,6 @@ export default function VehicleConfigurator() {
     }));
   };
 
-  const getSelectedFeature = (categoryId: string): Feature | undefined => {
-    const category = mockFeatures.find(cat => cat.id === categoryId);
-    if (!category) return undefined;
-    return category.features.find(feature => feature.id === selectedFeatures[categoryId]);
-  };
-
   const getTotalPrice = () => {
     let total = 45000; // Base price
     Object.entries(selectedFeatures).forEach(([categoryId, featureId]) => {
@@ -116,18 +110,32 @@ export default function VehicleConfigurator() {
 
   return (
     <div className="min-h-screen bg-configurator-bg">
-      {/* Header Navigation */}
+      {/* Header */}
       <header className="bg-configurator-panel border-b border-configurator-border">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-8">
-              <h1 className="text-2xl font-bold text-foreground">VEHICLE CONFIGURATOR</h1>
-              <nav className="hidden md:flex space-x-1">
+            <h1 className="text-2xl font-bold text-foreground">VEHICLE CONFIGURATOR</h1>
+            <div className="text-sm text-muted-foreground">
+              Range Rover SV • Standard Wheelbase
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Layout - Exact 40/60 split */}
+      <div className="flex h-[calc(100vh-80px)]">
+        {/* Left Panel - 40% */}
+        <div className="w-2/5 bg-configurator-panel border-r border-configurator-border flex flex-col">
+          {/* Tabs to select from Categories */}
+          <div className="border-b border-configurator-border">
+            <div className="p-4">
+              <h2 className="text-lg font-semibold text-foreground mb-3">Vehicle Configurator</h2>
+              <div className="flex flex-wrap gap-1">
                 {mockFeatures.map((category) => (
                   <button
                     key={category.id}
                     onClick={() => setActiveCategory(category.id)}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    className={`px-3 py-2 text-sm font-medium rounded transition-colors ${
                       activeCategory === category.id
                         ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:text-foreground hover:bg-feature-hover"
@@ -136,41 +144,25 @@ export default function VehicleConfigurator() {
                     {category.name}
                   </button>
                 ))}
-              </nav>
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">Total Price</div>
-              <div className="text-2xl font-bold text-price-accent">
-                £{getTotalPrice().toLocaleString()}
               </div>
             </div>
           </div>
-        </div>
-      </header>
 
-      {/* Main Configurator */}
-      <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-5 min-h-[calc(100vh-120px)]">
-          {/* Left Panel - Features */}
-          <div className="col-span-2 bg-configurator-panel border-r border-configurator-border">
-            <div className="p-6">
-              <div className="mb-6">
-                <h2 className="text-xl font-semibold text-foreground mb-2">
-                  {mockFeatures.find(cat => cat.id === activeCategory)?.name}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Choose your preferred option from the available features
-                </p>
-              </div>
-
-              {/* Feature Options */}
-              <div className="space-y-3">
+          {/* Subcategories */}
+          <div className="flex-1 overflow-auto">
+            <div className="p-4">
+              <h3 className="text-base font-medium text-foreground mb-3">
+                {mockFeatures.find(cat => cat.id === activeCategory)?.name}
+              </h3>
+              
+              {/* Feature Type if available */}
+              <div className="space-y-2">
                 {mockFeatures
                   .find(cat => cat.id === activeCategory)
                   ?.features.map((feature) => (
-                    <Card
+                    <div
                       key={feature.id}
-                      className={`p-4 cursor-pointer transition-all border-2 ${
+                      className={`p-3 border rounded cursor-pointer transition-all ${
                         selectedFeatures[activeCategory] === feature.id
                           ? "border-feature-selected bg-feature-selected/5"
                           : "border-configurator-border hover:border-muted-foreground hover:bg-feature-hover"
@@ -178,86 +170,77 @@ export default function VehicleConfigurator() {
                       onClick={() => handleFeatureSelect(activeCategory, feature.id)}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                              selectedFeatures[activeCategory] === feature.id
-                                ? "border-feature-selected bg-feature-selected"
-                                : "border-muted-foreground"
-                            }`}>
-                              {selectedFeatures[activeCategory] === feature.id && (
-                                <Check className="w-3 h-3 text-white" />
-                              )}
-                            </div>
-                            <div>
-                              <h3 className="font-medium text-foreground">{feature.name}</h3>
-                              {feature.description && (
-                                <p className="text-sm text-muted-foreground">{feature.description}</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`font-semibold ${
-                            feature.price === 0 
-                              ? "text-muted-foreground" 
-                              : "text-price-accent"
+                        <div className="flex items-center gap-3">
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                            selectedFeatures[activeCategory] === feature.id
+                              ? "border-feature-selected bg-feature-selected"
+                              : "border-muted-foreground"
                           }`}>
-                            {feature.price === 0 ? "Included" : `+£${feature.price.toLocaleString()}`}
+                            {selectedFeatures[activeCategory] === feature.id && (
+                              <Check className="w-2.5 h-2.5 text-white" />
+                            )}
                           </div>
+                          <span className="text-sm font-medium text-foreground">{feature.name}</span>
                         </div>
-                      </div>
-                    </Card>
-                  ))}
-              </div>
-
-              {/* Selected Features Summary */}
-              <div className="mt-8 pt-6 border-t border-configurator-border">
-                <h3 className="font-semibold text-foreground mb-4">Selected Features</h3>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {getSelectedFeaturesList().map((item, index) => (
-                    <div key={index} className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">{item?.category}</span>
-                      <div className="text-right">
-                        <div className="font-medium text-foreground">{item?.feature.name}</div>
-                        <div className="text-price-accent">
-                          {item?.feature.price === 0 ? "Included" : `+£${item?.feature.price.toLocaleString()}`}
-                        </div>
+                        <span className={`text-sm font-medium ${
+                          feature.price === 0 
+                            ? "text-muted-foreground" 
+                            : "text-price-accent"
+                        }`}>
+                          {feature.price === 0 ? "Included" : `+£${feature.price.toLocaleString()}`}
+                        </span>
                       </div>
                     </div>
                   ))}
-                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Panel - 60% */}
+        <div className="w-3/5 bg-gradient-to-br from-configurator-bg to-configurator-panel flex flex-col">
+          {/* Vehicle Image */}
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="relative max-w-full w-full">
+              <img
+                src={vehiclePreview}
+                alt="Vehicle Preview"
+                className="w-full h-auto object-contain max-h-96"
+              />
+              <div className="absolute top-4 right-4">
+                <Badge variant="secondary" className="text-xs">
+                  Live Preview
+                </Badge>
               </div>
             </div>
           </div>
 
-          {/* Right Panel - Vehicle Preview */}
-          <div className="col-span-3 bg-gradient-to-br from-configurator-bg to-configurator-panel">
-            <div className="h-full flex flex-col">
-              <div className="flex-1 flex items-center justify-center p-8">
-                <div className="relative max-w-4xl w-full">
-                  <img
-                    src={vehiclePreview}
-                    alt="Vehicle Preview"
-                    className="w-full h-auto object-contain"
-                  />
-                  <div className="absolute top-4 right-4">
-                    <Badge variant="secondary" className="text-sm">
-                      Live Preview
-                    </Badge>
+          {/* Selected Feature List (scrollable) */}
+          <div className="bg-configurator-panel border-t border-configurator-border">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold text-foreground mb-4">Selected Features</h3>
+              <div className="space-y-3 max-h-40 overflow-y-auto mb-6">
+                {getSelectedFeaturesList().map((item, index) => (
+                  <div key={index} className="flex justify-between items-center py-2 border-b border-configurator-border last:border-b-0">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">{item?.feature.name}</div>
+                      <div className="text-xs text-muted-foreground">{item?.category}</div>
+                    </div>
+                    <div className="text-sm font-medium text-price-accent">
+                      {item?.feature.price === 0 ? "Included" : `+£${item?.feature.price.toLocaleString()}`}
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
 
-              {/* Vehicle Info */}
-              <div className="p-6 bg-configurator-panel border-t border-configurator-border">
+              {/* Total Price */}
+              <div className="pt-4 border-t border-configurator-border">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="text-lg font-semibold text-foreground">Range Rover SV</h3>
-                    <p className="text-muted-foreground">Standard Wheelbase • D350 Diesel Mild Hybrid</p>
+                    <div className="text-lg font-semibold text-foreground">Total Price</div>
+                    <div className="text-sm text-muted-foreground">Base price: £45,000</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-muted-foreground">From</div>
                     <div className="text-2xl font-bold text-price-accent">
                       £{getTotalPrice().toLocaleString()}
                     </div>
@@ -269,16 +252,16 @@ export default function VehicleConfigurator() {
         </div>
       </div>
 
-      {/* Bottom Navigation */}
+      {/* Navigation Buttons */}
       <div className="bg-configurator-panel border-t border-configurator-border">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
             <Button variant="outline" className="flex items-center gap-2">
               <ChevronLeft className="w-4 h-4" />
-              Back to Selection
+              Back
             </Button>
             <Button className="flex items-center gap-2 bg-primary hover:bg-primary/90">
-              Continue to Summary
+              Next
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
