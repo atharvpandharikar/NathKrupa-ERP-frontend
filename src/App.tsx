@@ -29,6 +29,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <React.Suspense fallback={<div className="p-6">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Index />} />
 
@@ -51,6 +52,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </React.Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
