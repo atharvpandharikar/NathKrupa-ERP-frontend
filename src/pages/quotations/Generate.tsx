@@ -231,7 +231,7 @@ export default function GenerateQuotation() {
                         </div>;
                 })}
                   {Object.keys(selected).filter(key => selected[+key]).length === 0 && <p className="text-muted-foreground text-center py-8 animate-fade-in">No features selected</p>}
-                  <div className="border-t pt-4 mt-4 sticky bottom-0 bg-background/95 backdrop-blur">
+                  <div className="border-t pt-4 mt-4 sticky bottom-0 bg-background/95 backdrop-blur -mb-6">
                     <div className="flex justify-between items-center text-lg font-bold">
                       <span>Total Price</span>
                       <span className="text-green-600">₹{total.toLocaleString()}</span>
