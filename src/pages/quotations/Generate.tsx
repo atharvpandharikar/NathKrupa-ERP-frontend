@@ -262,7 +262,7 @@ export default function GenerateQuotation() {
                       <CardHeader className="pb-3 flex-shrink-0">
                         <CardTitle className="text-base">{parentCat.name} - Features</CardTitle>
                       </CardHeader>
-                      <CardContent className="flex-1 overflow-y-auto space-y-4">
+                      <CardContent className="flex-1 overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-muted-foreground/30 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/50 transition-all duration-200">
                         {categories.filter(c => c.parentId === parentCat.id || parentCat.id === 76 && c.id === 76) // Special handling for Painting
                     .map(subCat => {
                       const features = featureTypes.filter(ft => ft.categoryId === subCat.id);
