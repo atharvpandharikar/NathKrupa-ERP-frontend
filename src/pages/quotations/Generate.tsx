@@ -421,22 +421,6 @@ export default function GenerateQuotation() {
             >
               Add Feature
             </Button>
-
-            {/* Custom Features List */}
-            {customFeatures.length > 0 && (
-              <div className="mt-6 space-y-2">
-                <h4 className="font-medium">Added Custom Features:</h4>
-                {customFeatures.map((cf, i) => (
-                  <div key={i} className="flex justify-between items-center p-2 border rounded">
-                    <div>
-                      <div className="text-sm font-medium">{cf.name}</div>
-                      <div className="text-xs text-muted-foreground">{cf.category}</div>
-                    </div>
-                    <Badge>₹{cf.price}</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -446,12 +430,27 @@ export default function GenerateQuotation() {
             <CardTitle>Selected Features</CardTitle>
           </CardHeader>
           <CardContent>
-            {selectedFeaturesList.length > 0 ? <ul className="space-y-2">
-                {selectedFeaturesList.map((item, i) => <li key={i} className="flex justify-between">
-                    <span>{item.category} - {item.feature}</span>
-                    <Badge>₹{item.cost}</Badge>
-                  </li>)}
-              </ul> : <p className="text-muted-foreground">No features selected</p>}
+            <div className="space-y-2">
+              {/* Regular Features */}
+              {selectedFeaturesList.length > 0 && selectedFeaturesList.map((item, i) => (
+                <div key={i} className="flex justify-between items-center">
+                  <span>{item.category} - {item.feature}</span>
+                  <Badge>₹{item.cost}</Badge>
+                </div>
+              ))}
+              
+              {/* Custom Features with different color */}
+              {customFeatures.map((cf, i) => (
+                <div key={`custom-${i}`} className="flex justify-between items-center">
+                  <span>{cf.category} - {cf.name}</span>
+                  <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">₹{cf.price}</Badge>
+                </div>
+              ))}
+              
+              {selectedFeaturesList.length === 0 && customFeatures.length === 0 && (
+                <p className="text-muted-foreground">No features selected</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
