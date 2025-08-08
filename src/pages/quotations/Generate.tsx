@@ -211,27 +211,27 @@ export default function GenerateQuotation() {
                     </Button>
                   </SheetTitle>
                 </SheetHeader>
-                <div className="mt-6 space-y-4">
+                <div className="mt-6 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-background hover:scrollbar-thumb-border/60 transition-all duration-300 pr-2">
                   {Object.entries(selected).filter(([, featureTypeId]) => featureTypeId).map(([categoryId, featureTypeId]) => {
                   const category = categories.find(c => c.id === +categoryId);
                   const feature = featureTypes.find(f => f.id === featureTypeId);
-                  return <div key={categoryId} className="flex items-center justify-between p-3 border rounded-lg">
+                  return <div key={categoryId} className="flex items-center justify-between p-3 border rounded-lg animate-fade-in hover:shadow-sm transition-all duration-200 hover:scale-[1.01] group">
                           <div className="flex-1">
-                            <div className="font-medium text-sm">{feature?.name}</div>
+                            <div className="font-medium text-sm group-hover:text-foreground transition-colors duration-150">{feature?.name}</div>
                             <div className="text-xs text-muted-foreground">{category?.name}</div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 group-hover:bg-green-200 dark:group-hover:bg-green-800/30 transition-colors duration-150">
                               ₹{feature?.base_cost}
                             </Badge>
-                            <Button variant="ghost" size="sm" onClick={() => removeFeature(+categoryId)} className="h-6 w-6 p-0">
+                            <Button variant="ghost" size="sm" onClick={() => removeFeature(+categoryId)} className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive transition-all duration-150">
                               <X className="h-3 w-3" />
                             </Button>
                           </div>
                         </div>;
                 })}
-                  {Object.keys(selected).filter(key => selected[+key]).length === 0 && <p className="text-muted-foreground text-center py-8">No features selected</p>}
-                  <div className="border-t pt-4 mt-4">
+                  {Object.keys(selected).filter(key => selected[+key]).length === 0 && <p className="text-muted-foreground text-center py-8 animate-fade-in">No features selected</p>}
+                  <div className="border-t pt-4 mt-4 sticky bottom-0 bg-background/95 backdrop-blur">
                     <div className="flex justify-between items-center text-lg font-bold">
                       <span>Total Price</span>
                       <span className="text-green-600">₹{total.toLocaleString()}</span>
