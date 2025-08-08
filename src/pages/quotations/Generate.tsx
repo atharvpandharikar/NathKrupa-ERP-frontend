@@ -327,6 +327,13 @@ export default function GenerateQuotation() {
   }
 
   // Step 3: Review
+  const [customFeature, setCustomFeature] = useState({
+    category: "",
+    name: "",
+    price: ""
+  });
+  const [customFeatures, setCustomFeatures] = useState<Array<{category: string, name: string, price: number}>>([]);
+
   const selectedFeaturesList = Object.entries(selected).filter(([, featureTypeId]) => featureTypeId).map(([categoryId, featureTypeId]) => {
     const category = categories.find(c => c.id === +categoryId);
     const feature = featureTypes.find(f => f.id === featureTypeId);
@@ -336,13 +343,103 @@ export default function GenerateQuotation() {
       cost: feature?.base_cost || 0
     };
   });
+
+  const addCustomFeature = () => {
+    if (customFeature.category && customFeature.name && customFeature.price) {
+      setCustomFeatures([...customFeatures, {
+        category: customFeature.category,
+        name: customFeature.name,
+        price: parseInt(customFeature.price)
+      }]);
+      setCustomFeature({ category: "", name: "", price: "" });
+    }
+  };
+
+  const totalWithCustom = total + customFeatures.reduce((sum, cf) => sum + cf.price, 0);
+
   return <section className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold mb-1">Review & Finalize</h1>
         <p className="text-sm text-muted-foreground">Review your configuration and generate quotation</p>
       </div>
 
-      <div className="grid gap-4 max-w-2xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-6xl">
+        {/* Left Side - Custom Features */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Add Custom Features</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Feature Category</label>
+              <Select value={customFeature.category} onValueChange={(value) => setCustomFeature({...customFeature, category: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Front Section">Front Section</SelectItem>
+                  <SelectItem value="Rear Section">Rear Section</SelectItem>
+                  <SelectItem value="Side Section">Side Section</SelectItem>
+                  <SelectItem value="Inside Cargo Body">Inside Cargo Body</SelectItem>
+                  <SelectItem value="On Chassis/Underbody">On Chassis/Underbody</SelectItem>
+                  <SelectItem value="Accessories">Accessories</SelectItem>
+                  <SelectItem value="Painting">Painting</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Feature Name</label>
+              <input 
+                type="text"
+                className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Enter feature name"
+                value={customFeature.name}
+                onChange={(e) => setCustomFeature({...customFeature, name: e.target.value})}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">Price</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">₹</span>
+                <input 
+                  type="number"
+                  className="w-full pl-8 pr-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Enter price"
+                  value={customFeature.price}
+                  onChange={(e) => setCustomFeature({...customFeature, price: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <Button 
+              onClick={addCustomFeature} 
+              disabled={!customFeature.category || !customFeature.name || !customFeature.price}
+              className="w-full"
+            >
+              Add Feature
+            </Button>
+
+            {/* Custom Features List */}
+            {customFeatures.length > 0 && (
+              <div className="mt-6 space-y-2">
+                <h4 className="font-medium">Added Custom Features:</h4>
+                {customFeatures.map((cf, i) => (
+                  <div key={i} className="flex justify-between items-center p-2 border rounded">
+                    <div>
+                      <div className="text-sm font-medium">{cf.name}</div>
+                      <div className="text-xs text-muted-foreground">{cf.category}</div>
+                    </div>
+                    <Badge>₹{cf.price}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Right Side - Selected Features */}
         <Card>
           <CardHeader>
             <CardTitle>Selected Features</CardTitle>
@@ -356,13 +453,13 @@ export default function GenerateQuotation() {
               </ul> : <p className="text-muted-foreground">No features selected</p>}
           </CardContent>
         </Card>
+      </div>
 
-        <div className="text-right text-xl font-bold">Total: ₹{total}</div>
+      <div className="text-right text-xl font-bold">Total: ₹{totalWithCustom.toLocaleString()}</div>
 
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
-          <Button onClick={finalize}>Generate Quote</Button>
-        </div>
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
+        <Button onClick={finalize}>Generate Quote</Button>
       </div>
     </section>;
 }
