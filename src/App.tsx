@@ -11,8 +11,8 @@ import NotFound from "./pages/NotFound";
 const LazyMainLayout = React.lazy(() => import("./components/layout/MainLayout"));
 const LazyDashboard = React.lazy(() => import("./pages/dashboard/Dashboard"));
 const LazyCustomers = React.lazy(() => import("./pages/dashboard/Customers"));
-const LazyAddCustomer = React.lazy(() => import("./pages/dashboard/AddCustomer"));
 const LazyQuotationGenerate = React.lazy(() => import("./pages/quotations/Generate"));
+const LazyQuotationsList = React.lazy(() => import("./pages/quotations/List"));
 const LazyQuotationDetails = React.lazy(() => import("./pages/quotations/Details"));
 const LazyBillDetails = React.lazy(() => import("./pages/bills/Details"));
 const LazyReports = React.lazy(() => import("./pages/reports/Reports"));
@@ -41,7 +41,7 @@ const App = () => (
           <Route element={<LazyMainLayout />}>
             <Route path="/dashboard" element={<LazyDashboard />} />
             <Route path="/dashboard/customers" element={<LazyCustomers />} />
-            <Route path="/dashboard/customers/new" element={<LazyAddCustomer />} />
+            <Route path="/quotations" element={<LazyQuotationsList />} />
             <Route path="/quotations/generate" element={<LazyQuotationGenerate />} />
             <Route path="/quotations/:id" element={<LazyQuotationDetails />} />
             <Route path="/bills/:id" element={<LazyBillDetails />} />
