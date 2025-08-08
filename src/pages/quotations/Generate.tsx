@@ -156,9 +156,9 @@ export default function GenerateQuotation() {
 
         {/* Horizontal Parent Category Tabs */}
         <Tabs value={activeParentCategory.toString()} onValueChange={(value) => setActiveParentCategory(parseInt(value))}>
-          <TabsList className="grid w-full grid-cols-7 mb-8">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 mb-8 h-auto">
             {parentCategories.map((cat) => (
-              <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm">
+              <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm whitespace-normal text-center h-auto py-3 leading-tight">
                 {cat.name}
               </TabsTrigger>
             ))}
