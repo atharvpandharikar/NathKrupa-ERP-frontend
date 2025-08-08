@@ -10,7 +10,7 @@ export default function MainLayout() {
   return (
     <SidebarProvider open={open} onOpenChange={setOpen}>
       <div className="flex w-full min-h-screen">
-        <Sidebar collapsible variant="inset">
+        <Sidebar collapsible="icon" variant="inset">
           <SidebarContent>
             <SidebarGroup>
               <SidebarGroupLabel>Nathkrupa ERP</SidebarGroupLabel>
