@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { vehicleTypes, vehicleMakers, getMakerModels, getTypeMakers, categories, featureTypes, saveQuotation } from "@/mock/data";
 import type { QuotationData } from "@/types";
 
@@ -17,6 +18,7 @@ export default function GenerateQuotation() {
     variant: "",
   });
   const [selected, setSelected] = useState<{ [categoryId: number]: number | null }>({});
+  const [activeParentCategory, setActiveParentCategory] = useState(10); // Default to "Front Section"
 
   useEffect(() => {
     document.title = "Generate Quotation | Nathkrupa ERP";
@@ -40,6 +42,36 @@ export default function GenerateQuotation() {
     };
     saveQuotation(newQuote);
     navigate(`/quotations/${newQuote.id}`);
+  };
+
+  // Parent categories for horizontal tabs
+  const parentCategories = [
+    { id: 10, name: "Front Section" },
+    { id: 30, name: "Rear Section" },
+    { id: 40, name: "Side Section" },
+    { id: 50, name: "Inside Cargo Body" },
+    { id: 60, name: "On Chassis / Underbody" },
+    { id: 70, name: "Accessories" },
+    { id: 76, name: "Painting" } // Adding painting as separate category
+  ];
+
+  // Get current feature image based on selected features
+  const getCurrentFeatureImage = () => {
+    const selectedFeatureIds = Object.values(selected).filter(Boolean);
+    if (selectedFeatureIds.length > 0) {
+      // Return different images based on selected features or category
+      const categoryImages: { [key: number]: string } = {
+        10: "/src/assets/vehicle-preview.jpg", // Front Section
+        30: "/src/assets/vehicle-preview.jpg", // Rear Section
+        40: "/src/assets/vehicle-preview.jpg", // Side Section
+        50: "/src/assets/vehicle-preview.jpg", // Inside Cargo Body
+        60: "/src/assets/vehicle-preview.jpg", // On Chassis / Underbody
+        70: "/src/assets/vehicle-preview.jpg", // Accessories
+        76: "/src/assets/vehicle-preview.jpg", // Painting
+      };
+      return categoryImages[activeParentCategory] || "/src/assets/vehicle-preview.jpg";
+    }
+    return "/src/assets/vehicle-preview.jpg";
   };
 
   if (step === 1) {
@@ -116,43 +148,49 @@ export default function GenerateQuotation() {
 
   if (step === 2) {
     return (
-      <section className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold mb-1">Vehicle Configurator</h1>
-          <p className="text-sm text-muted-foreground">Customize your vehicle features</p>
+      <section className="space-y-6 max-w-7xl mx-auto">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-2">Vehicle Configurator</h1>
+          <p className="text-muted-foreground">Customize your vehicle features</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Left Panel - Categories and Features (40%) */}
-          <div className="lg:col-span-2 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Feature Categories</CardTitle>
-              </CardHeader>
-              <CardContent className="max-h-[600px] overflow-y-auto space-y-4">
-                {categories.filter((c) => !c.parentId).map((mainCat) => {
-                  const subCats = categories.filter((c) => c.parentId === mainCat.id);
-                  const leafCats = subCats.length > 0 ? subCats : [mainCat];
-                  
-                  return (
-                    <div key={mainCat.id} className="border rounded-lg p-4">
-                      <h3 className="font-medium mb-3">{mainCat.name}</h3>
-                      <div className="space-y-3">
-                        {leafCats.map((leafCat) => {
-                          const features = featureTypes.filter((ft) => ft.categoryId === leafCat.id);
+        {/* Horizontal Parent Category Tabs */}
+        <Tabs value={activeParentCategory.toString()} onValueChange={(value) => setActiveParentCategory(parseInt(value))}>
+          <TabsList className="grid w-full grid-cols-7 mb-8">
+            {parentCategories.map((cat) => (
+              <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm">
+                {cat.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {parentCategories.map((parentCat) => (
+            <TabsContent key={parentCat.id} value={parentCat.id.toString()}>
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                {/* Left Panel - Feature Categories (40%) */}
+                <div className="lg:col-span-2 space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{parentCat.name} - Features</CardTitle>
+                    </CardHeader>
+                    <CardContent className="max-h-[500px] overflow-y-auto space-y-4">
+                      {categories
+                        .filter((c) => c.parentId === parentCat.id || (parentCat.id === 76 && c.id === 76)) // Special handling for Painting
+                        .map((subCat) => {
+                          const features = featureTypes.filter((ft) => ft.categoryId === subCat.id);
                           if (features.length === 0) return null;
 
                           return (
-                            <div key={leafCat.id} className="pl-2">
-                              <div className="text-sm font-medium text-muted-foreground mb-2">{leafCat.name}</div>
-                              <div className="space-y-1">
+                            <div key={subCat.id} className="border rounded-lg p-4">
+                              <h3 className="font-medium mb-3">{subCat.name}</h3>
+                              <div className="space-y-2">
                                 {features.map((feature) => (
-                                  <label key={feature.id} className="flex items-center gap-2 cursor-pointer p-2 rounded hover:bg-muted/50">
+                                  <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50">
                                     <input
                                       type="radio"
-                                      name={`category-${leafCat.id}`}
-                                      checked={selected[leafCat.id] === feature.id}
-                                      onChange={() => setSelected({ ...selected, [leafCat.id]: feature.id })}
+                                      name={`category-${subCat.id}`}
+                                      checked={selected[subCat.id] === feature.id}
+                                      onChange={() => setSelected({ ...selected, [subCat.id]: feature.id })}
                                       className="text-primary"
                                     />
                                     <span className="flex-1 text-sm">{feature.name}</span>
@@ -163,77 +201,81 @@ export default function GenerateQuotation() {
                             </div>
                           );
                         })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Panel - Preview and Summary (60%) */}
-          <div className="lg:col-span-3 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Vehicle Preview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-muted/30 rounded-lg h-64 flex items-center justify-center mb-4">
-                  <img 
-                    src="/src/assets/vehicle-preview.jpg" 
-                    alt="Vehicle Preview" 
-                    className="max-h-full max-w-full object-contain rounded"
-                  />
+                    </CardContent>
+                  </Card>
                 </div>
-                <div className="text-sm text-muted-foreground text-center">
-                  {vehicle.typeId && vehicle.makerId && vehicle.modelId 
-                    ? `${vehicleTypes.find(vt => vt.id === vehicle.typeId)?.name} - ${vehicleMakers.find(vm => vm.id === vehicle.makerId)?.name}`
-                    : "Select vehicle configuration"
-                  }
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Selected Features</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {Object.entries(selected)
-                    .filter(([, featureTypeId]) => featureTypeId)
-                    .map(([categoryId, featureTypeId]) => {
-                      const category = categories.find((c) => c.id === +categoryId);
-                      const feature = featureTypes.find((f) => f.id === featureTypeId);
-                      return (
-                        <div key={categoryId} className="flex justify-between items-center py-2 border-b">
-                          <div>
-                            <div className="font-medium text-sm">{feature?.name}</div>
-                            <div className="text-xs text-muted-foreground">{category?.name}</div>
-                          </div>
-                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                            ₹{feature?.base_cost}
+                {/* Right Panel - Preview and Summary (60%) */}
+                <div className="lg:col-span-3 space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Vehicle Preview</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="bg-muted/30 rounded-lg h-80 flex items-center justify-center mb-4 relative">
+                        <img 
+                          src={getCurrentFeatureImage()}
+                          alt="Vehicle Preview" 
+                          className="max-h-full max-w-full object-contain rounded"
+                        />
+                        <div className="absolute top-2 right-2 flex gap-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {parentCat.name}
                           </Badge>
                         </div>
-                      );
-                    })}
-                  {Object.keys(selected).filter(key => selected[+key]).length === 0 && (
-                    <p className="text-muted-foreground text-center py-4">No features selected</p>
-                  )}
-                </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground text-center">
+                        {vehicle.typeId && vehicle.makerId && vehicle.modelId 
+                          ? `${vehicleTypes.find(vt => vt.id === vehicle.typeId)?.name} - ${vehicleMakers.find(vm => vm.id === vehicle.makerId)?.name}`
+                          : "Select vehicle configuration"
+                        }
+                      </div>
+                    </CardContent>
+                  </Card>
 
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex justify-between items-center text-lg font-bold">
-                    <span>Total Price</span>
-                    <span className="text-green-600">₹{total.toLocaleString()}</span>
-                  </div>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Selected Features</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {Object.entries(selected)
+                          .filter(([, featureTypeId]) => featureTypeId)
+                          .map(([categoryId, featureTypeId]) => {
+                            const category = categories.find((c) => c.id === +categoryId);
+                            const feature = featureTypes.find((f) => f.id === featureTypeId);
+                            return (
+                              <div key={categoryId} className="flex justify-between items-center py-2 border-b">
+                                <div>
+                                  <div className="font-medium text-sm">{feature?.name}</div>
+                                  <div className="text-xs text-muted-foreground">{category?.name}</div>
+                                </div>
+                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                                  ₹{feature?.base_cost}
+                                </Badge>
+                              </div>
+                            );
+                          })}
+                        {Object.keys(selected).filter(key => selected[+key]).length === 0 && (
+                          <p className="text-muted-foreground text-center py-4">No features selected</p>
+                        )}
+                      </div>
+
+                      <div className="border-t pt-4 mt-4">
+                        <div className="flex justify-between items-center text-lg font-bold">
+                          <span>Total Price</span>
+                          <span className="text-green-600">₹{total.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+              </div>
+            </TabsContent>
+          ))}
+        </Tabs>
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 justify-center">
           <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
           <Button onClick={() => setStep(3)}>Next: Review</Button>
         </div>
