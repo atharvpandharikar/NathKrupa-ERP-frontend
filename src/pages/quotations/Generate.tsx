@@ -23,6 +23,12 @@ export default function GenerateQuotation() {
   }>({});
   const [activeParentCategory, setActiveParentCategory] = useState(10); // Default to "Front Section"
   const [selectedFeaturesOpen, setSelectedFeaturesOpen] = useState(false);
+  const [customFeature, setCustomFeature] = useState({
+    category: "",
+    name: "",
+    price: ""
+  });
+  const [customFeatures, setCustomFeatures] = useState<Array<{category: string, name: string, price: number}>>([]);
   useEffect(() => {
     document.title = "Generate Quotation | Nathkrupa ERP";
   }, []);
@@ -33,12 +39,25 @@ export default function GenerateQuotation() {
       return sum + (ft?.base_cost || 0);
     }, 0);
   }, [selected]);
+  const addCustomFeature = () => {
+    if (customFeature.category && customFeature.name && customFeature.price) {
+      setCustomFeatures([...customFeatures, {
+        category: customFeature.category,
+        name: customFeature.name,
+        price: parseInt(customFeature.price)
+      }]);
+      setCustomFeature({ category: "", name: "", price: "" });
+    }
+  };
+
+  const totalWithCustom = total + customFeatures.reduce((sum, cf) => sum + cf.price, 0);
+
   const finalize = () => {
     const newQuote: QuotationData = {
       id: `QUO-${Date.now()}`,
       vehicle,
       selectedFeatures: selected,
-      total,
+      total: totalWithCustom,
       created_at: new Date().toISOString()
     };
     saveQuotation(newQuote);
@@ -327,12 +346,6 @@ export default function GenerateQuotation() {
   }
 
   // Step 3: Review
-  const [customFeature, setCustomFeature] = useState({
-    category: "",
-    name: "",
-    price: ""
-  });
-  const [customFeatures, setCustomFeatures] = useState<Array<{category: string, name: string, price: number}>>([]);
 
   const selectedFeaturesList = Object.entries(selected).filter(([, featureTypeId]) => featureTypeId).map(([categoryId, featureTypeId]) => {
     const category = categories.find(c => c.id === +categoryId);
@@ -344,18 +357,6 @@ export default function GenerateQuotation() {
     };
   });
 
-  const addCustomFeature = () => {
-    if (customFeature.category && customFeature.name && customFeature.price) {
-      setCustomFeatures([...customFeatures, {
-        category: customFeature.category,
-        name: customFeature.name,
-        price: parseInt(customFeature.price)
-      }]);
-      setCustomFeature({ category: "", name: "", price: "" });
-    }
-  };
-
-  const totalWithCustom = total + customFeatures.reduce((sum, cf) => sum + cf.price, 0);
 
   return <section className="space-y-6">
       <div>
