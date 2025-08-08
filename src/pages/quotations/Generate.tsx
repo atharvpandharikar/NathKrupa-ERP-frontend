@@ -5,6 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { X } from "lucide-react";
 import { vehicleTypes, vehicleMakers, getMakerModels, getTypeMakers, categories, featureTypes, saveQuotation } from "@/mock/data";
 import type { QuotationData } from "@/types";
 
@@ -19,6 +21,7 @@ export default function GenerateQuotation() {
   });
   const [selected, setSelected] = useState<{ [categoryId: number]: number | null }>({});
   const [activeParentCategory, setActiveParentCategory] = useState(10); // Default to "Front Section"
+  const [selectedFeaturesOpen, setSelectedFeaturesOpen] = useState(false);
 
   useEffect(() => {
     document.title = "Generate Quotation | Nathkrupa ERP";
@@ -42,6 +45,24 @@ export default function GenerateQuotation() {
     };
     saveQuotation(newQuote);
     navigate(`/quotations/${newQuote.id}`);
+  };
+
+  const clearAllSelections = () => {
+    setSelected({});
+  };
+
+  const removeFeature = (categoryId: number) => {
+    setSelected({ ...selected, [categoryId]: null });
+  };
+
+  const getSelectedVehicleName = () => {
+    if (vehicle.typeId && vehicle.makerId && vehicle.modelId) {
+      const type = vehicleTypes.find(vt => vt.id === vehicle.typeId);
+      const maker = vehicleMakers.find(vm => vm.id === vehicle.makerId);
+      const model = getMakerModels(vehicle.makerId).find(md => md.id === vehicle.modelId);
+      return `${type?.name} - ${maker?.name} ${model?.name}`;
+    }
+    return "No vehicle selected";
   };
 
   // Parent categories for horizontal tabs
@@ -148,138 +169,167 @@ export default function GenerateQuotation() {
 
   if (step === 2) {
     return (
-      <section className="space-y-6 max-w-7xl mx-auto">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold mb-2">Vehicle Configurator</h1>
-          <p className="text-muted-foreground">Customize your vehicle features</p>
+      <div className="h-screen flex flex-col max-w-7xl mx-auto">
+        {/* Compact header with vehicle name and clear selection */}
+        <div className="flex items-center justify-between py-4 px-6 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-lg font-semibold">Vehicle Configurator</h1>
+              <p className="text-sm text-muted-foreground">{getSelectedVehicleName()}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <Sheet open={selectedFeaturesOpen} onOpenChange={setSelectedFeaturesOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Selected Features ({Object.keys(selected).filter(key => selected[+key]).length})
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[400px] sm:w-[540px]">
+                <SheetHeader>
+                  <SheetTitle className="flex items-center justify-between">
+                    Selected Features
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={clearAllSelections}
+                      disabled={Object.keys(selected).filter(key => selected[+key]).length === 0}
+                    >
+                      Clear All
+                    </Button>
+                  </SheetTitle>
+                </SheetHeader>
+                <div className="mt-6 space-y-4">
+                  {Object.entries(selected)
+                    .filter(([, featureTypeId]) => featureTypeId)
+                    .map(([categoryId, featureTypeId]) => {
+                      const category = categories.find((c) => c.id === +categoryId);
+                      const feature = featureTypes.find((f) => f.id === featureTypeId);
+                      return (
+                        <div key={categoryId} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{feature?.name}</div>
+                            <div className="text-xs text-muted-foreground">{category?.name}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                              ₹{feature?.base_cost}
+                            </Badge>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => removeFeature(+categoryId)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  {Object.keys(selected).filter(key => selected[+key]).length === 0 && (
+                    <p className="text-muted-foreground text-center py-8">No features selected</p>
+                  )}
+                  <div className="border-t pt-4 mt-4">
+                    <div className="flex justify-between items-center text-lg font-bold">
+                      <span>Total Price</span>
+                      <span className="text-green-600">₹{total.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+            <Button variant="outline" size="sm" onClick={() => setStep(1)}>Back</Button>
+            <Button size="sm" onClick={() => setStep(3)}>Next: Review</Button>
+          </div>
         </div>
 
         {/* Horizontal Parent Category Tabs */}
-        <Tabs value={activeParentCategory.toString()} onValueChange={(value) => setActiveParentCategory(parseInt(value))}>
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 mb-8 h-auto">
-            {parentCategories.map((cat) => (
-              <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm whitespace-normal text-center h-auto py-3 leading-tight">
-                {cat.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Tabs value={activeParentCategory.toString()} onValueChange={(value) => setActiveParentCategory(parseInt(value))} className="flex flex-col h-full">
+            <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 mb-4 h-auto mx-6">
+              {parentCategories.map((cat) => (
+                <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm whitespace-normal text-center h-auto py-3 leading-tight">
+                  {cat.name}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-          {parentCategories.map((parentCat) => (
-            <TabsContent key={parentCat.id} value={parentCat.id.toString()}>
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                {/* Left Panel - Feature Categories (40%) */}
-                <div className="lg:col-span-2 space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{parentCat.name} - Features</CardTitle>
-                    </CardHeader>
-                    <CardContent className="max-h-[500px] overflow-y-auto space-y-4">
-                      {categories
-                        .filter((c) => c.parentId === parentCat.id || (parentCat.id === 76 && c.id === 76)) // Special handling for Painting
-                        .map((subCat) => {
-                          const features = featureTypes.filter((ft) => ft.categoryId === subCat.id);
-                          if (features.length === 0) return null;
+            {parentCategories.map((parentCat) => (
+              <TabsContent key={parentCat.id} value={parentCat.id.toString()} className="flex-1 overflow-hidden">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full px-6">
+                  {/* Left Panel - Feature Categories (40%) */}
+                  <div className="lg:col-span-2">
+                    <Card className="h-full">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{parentCat.name} - Features</CardTitle>
+                      </CardHeader>
+                      <CardContent className="h-full overflow-y-auto space-y-4 pb-20">
+                        {categories
+                          .filter((c) => c.parentId === parentCat.id || (parentCat.id === 76 && c.id === 76)) // Special handling for Painting
+                          .map((subCat) => {
+                            const features = featureTypes.filter((ft) => ft.categoryId === subCat.id);
+                            if (features.length === 0) return null;
 
-                          return (
-                            <div key={subCat.id} className="border rounded-lg p-4">
-                              <h3 className="font-medium mb-3">{subCat.name}</h3>
-                              <div className="space-y-2">
-                                {features.map((feature) => (
-                                  <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50">
-                                    <input
-                                      type="radio"
-                                      name={`category-${subCat.id}`}
-                                      checked={selected[subCat.id] === feature.id}
-                                      onChange={() => setSelected({ ...selected, [subCat.id]: feature.id })}
-                                      className="text-primary"
-                                    />
-                                    <span className="flex-1 text-sm">{feature.name}</span>
-                                    <Badge variant="outline" className="text-xs">₹{feature.base_cost}</Badge>
-                                  </label>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Right Panel - Preview and Summary (60%) */}
-                <div className="lg:col-span-3 space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Vehicle Preview</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="bg-muted/30 rounded-lg h-80 flex items-center justify-center mb-4 relative">
-                        <img 
-                          src={getCurrentFeatureImage()}
-                          alt="Vehicle Preview" 
-                          className="max-h-full max-w-full object-contain rounded"
-                        />
-                        <div className="absolute top-2 right-2 flex gap-2">
-                          <Badge variant="secondary" className="text-xs">
-                            {parentCat.name}
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground text-center">
-                        {vehicle.typeId && vehicle.makerId && vehicle.modelId 
-                          ? `${vehicleTypes.find(vt => vt.id === vehicle.typeId)?.name} - ${vehicleMakers.find(vm => vm.id === vehicle.makerId)?.name}`
-                          : "Select vehicle configuration"
-                        }
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Selected Features</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {Object.entries(selected)
-                          .filter(([, featureTypeId]) => featureTypeId)
-                          .map(([categoryId, featureTypeId]) => {
-                            const category = categories.find((c) => c.id === +categoryId);
-                            const feature = featureTypes.find((f) => f.id === featureTypeId);
                             return (
-                              <div key={categoryId} className="flex justify-between items-center py-2 border-b">
-                                <div>
-                                  <div className="font-medium text-sm">{feature?.name}</div>
-                                  <div className="text-xs text-muted-foreground">{category?.name}</div>
+                              <div key={subCat.id} className="border rounded-lg p-4">
+                                <h3 className="font-medium mb-3">{subCat.name}</h3>
+                                <div className="space-y-2">
+                                  {features.map((feature) => (
+                                    <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50">
+                                      <input
+                                        type="radio"
+                                        name={`category-${subCat.id}`}
+                                        checked={selected[subCat.id] === feature.id}
+                                        onChange={() => setSelected({ ...selected, [subCat.id]: feature.id })}
+                                        className="text-primary"
+                                      />
+                                      <span className="flex-1 text-sm">{feature.name}</span>
+                                      <Badge variant="outline" className="text-xs">₹{feature.base_cost}</Badge>
+                                    </label>
+                                  ))}
                                 </div>
-                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                                  ₹{feature?.base_cost}
-                                </Badge>
                               </div>
                             );
                           })}
-                        {Object.keys(selected).filter(key => selected[+key]).length === 0 && (
-                          <p className="text-muted-foreground text-center py-4">No features selected</p>
-                        )}
-                      </div>
+                      </CardContent>
+                    </Card>
+                  </div>
 
-                      <div className="border-t pt-4 mt-4">
-                        <div className="flex justify-between items-center text-lg font-bold">
-                          <span>Total Price</span>
-                          <span className="text-green-600">₹{total.toLocaleString()}</span>
+                  {/* Right Panel - Preview (60%) */}
+                  <div className="lg:col-span-3">
+                    <Card className="h-full">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Vehicle Preview</CardTitle>
+                      </CardHeader>
+                      <CardContent className="h-full flex flex-col">
+                        <div className="bg-muted/30 rounded-lg flex-1 flex items-center justify-center relative">
+                          <img 
+                            src={getCurrentFeatureImage()}
+                            alt="Vehicle Preview" 
+                            className="max-h-full max-w-full object-contain rounded"
+                          />
+                          <div className="absolute top-2 right-2 flex gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {parentCat.name}
+                            </Badge>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                        <div className="text-sm text-muted-foreground text-center mt-4">
+                          {vehicle.typeId && vehicle.makerId && vehicle.modelId 
+                            ? `${vehicleTypes.find(vt => vt.id === vehicle.typeId)?.name} - ${vehicleMakers.find(vm => vm.id === vehicle.makerId)?.name}`
+                            : "Select vehicle configuration"
+                          }
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
-              </div>
-            </TabsContent>
-          ))}
-        </Tabs>
-        
-        <div className="flex gap-2 justify-center">
-          <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
-          <Button onClick={() => setStep(3)}>Next: Review</Button>
+              </TabsContent>
+            ))}
+          </Tabs>
         </div>
-      </section>
+      </div>
     );
   }
 
