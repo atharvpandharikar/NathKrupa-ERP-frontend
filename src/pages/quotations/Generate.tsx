@@ -1,14 +1,24 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
 import { vehicleTypes, vehicleMakers, getMakerModels, getTypeMakers, categories, featureTypes, saveQuotation } from "@/mock/data";
 import type { QuotationData } from "@/types";
+type CustomerInfo = {
+  name: string;
+  phone: string;
+  email: string;
+  vehicleNumber: string;
+};
+
 export default function GenerateQuotation() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -29,6 +39,13 @@ export default function GenerateQuotation() {
     price: ""
   });
   const [customFeatures, setCustomFeatures] = useState<Array<{category: string, name: string, price: number}>>([]);
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
+    name: "",
+    phone: "",
+    email: "",
+    vehicleNumber: ""
+  });
+  const [errors, setErrors] = useState<Partial<CustomerInfo>>({});
   useEffect(() => {
     document.title = "Generate Quotation | Nathkrupa ERP";
   }, []);
@@ -52,7 +69,36 @@ export default function GenerateQuotation() {
 
   const totalWithCustom = total + customFeatures.reduce((sum, cf) => sum + cf.price, 0);
 
+  const validateCustomerInfo = () => {
+    const newErrors: Partial<CustomerInfo> = {};
+    
+    if (!customerInfo.name.trim()) {
+      newErrors.name = "Name is required";
+    }
+    
+    if (!customerInfo.phone.trim()) {
+      newErrors.phone = "Phone number is required";
+    } else if (!/^\d{10}$/.test(customerInfo.phone)) {
+      newErrors.phone = "Phone number must be exactly 10 digits";
+    }
+    
+    if (customerInfo.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerInfo.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+    
+    if (customerInfo.vehicleNumber && !/^[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,2}\s?\d{4}$/i.test(customerInfo.vehicleNumber)) {
+      newErrors.vehicleNumber = "Invalid vehicle number format (e.g., MH 01 AB 1234)";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const finalize = () => {
+    if (!validateCustomerInfo()) {
+      return;
+    }
+    
     const newQuote: QuotationData = {
       id: `QUO-${Date.now()}`,
       vehicle,
@@ -456,6 +502,69 @@ export default function GenerateQuotation() {
       </div>
 
       <div className="text-right text-xl font-bold">Total: ₹{totalWithCustom.toLocaleString()}</div>
+
+      {/* Customer Information Form */}
+      <Card className="max-w-6xl">
+        <CardHeader>
+          <CardTitle>Customer Information</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <Label htmlFor="customerName">Name *</Label>
+              <Input
+                id="customerName"
+                type="text"
+                placeholder="Enter customer name"
+                value={customerInfo.name}
+                onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})}
+                className={errors.name ? "border-destructive" : ""}
+              />
+              {errors.name && <p className="text-sm text-destructive mt-1">{errors.name}</p>}
+            </div>
+
+            <div>
+              <Label htmlFor="customerPhone">Phone Number *</Label>
+              <Input
+                id="customerPhone"
+                type="tel"
+                placeholder="10 digit phone number"
+                value={customerInfo.phone}
+                onChange={(e) => setCustomerInfo({...customerInfo, phone: e.target.value.replace(/\D/g, '')})}
+                maxLength={10}
+                className={errors.phone ? "border-destructive" : ""}
+              />
+              {errors.phone && <p className="text-sm text-destructive mt-1">{errors.phone}</p>}
+            </div>
+
+            <div>
+              <Label htmlFor="customerEmail">Email ID</Label>
+              <Input
+                id="customerEmail"
+                type="email"
+                placeholder="customer@example.com"
+                value={customerInfo.email}
+                onChange={(e) => setCustomerInfo({...customerInfo, email: e.target.value})}
+                className={errors.email ? "border-destructive" : ""}
+              />
+              {errors.email && <p className="text-sm text-destructive mt-1">{errors.email}</p>}
+            </div>
+
+            <div>
+              <Label htmlFor="vehicleNumber">Vehicle Number</Label>
+              <Input
+                id="vehicleNumber"
+                type="text"
+                placeholder="MH 01 AB 1234"
+                value={customerInfo.vehicleNumber}
+                onChange={(e) => setCustomerInfo({...customerInfo, vehicleNumber: e.target.value.toUpperCase()})}
+                className={errors.vehicleNumber ? "border-destructive" : ""}
+              />
+              {errors.vehicleNumber && <p className="text-sm text-destructive mt-1">{errors.vehicleNumber}</p>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex gap-2">
         <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
