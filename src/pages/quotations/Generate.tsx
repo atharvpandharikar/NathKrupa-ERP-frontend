@@ -186,9 +186,9 @@ export default function GenerateQuotation() {
       </section>;
   }
   if (step === 2) {
-    return <div className="h-screen flex flex-col max-w-7xl mx-auto">
+    return <div className="h-screen flex flex-col max-w-7xl mx-auto overflow-hidden">
         {/* Compact header with vehicle name and clear selection */}
-        <div className="flex items-center justify-between py-4 px-6 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex items-center justify-between py-4 px-6 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
           <div className="flex items-center gap-4">
             <div>
               <h1 className="text-lg font-semibold">Vehicle Configurator</h1>
@@ -248,7 +248,7 @@ export default function GenerateQuotation() {
         {/* Horizontal Parent Category Tabs */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <Tabs value={activeParentCategory.toString()} onValueChange={value => setActiveParentCategory(parseInt(value))} className="flex flex-col h-full">
-            <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 mb-4 h-auto mx-6">
+            <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 mb-4 h-auto mx-6 flex-shrink-0">
               {parentCategories.map(cat => <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm whitespace-normal text-center h-auto py-3 leading-tight">
                   {cat.name}
                 </TabsTrigger>)}
@@ -257,12 +257,12 @@ export default function GenerateQuotation() {
             {parentCategories.map(parentCat => <TabsContent key={parentCat.id} value={parentCat.id.toString()} className="flex-1 overflow-hidden">
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full px-6">
                   {/* Left Panel - Feature Categories (40%) */}
-                  <div className="lg:col-span-2">
-                    <Card className="h-full">
-                      <CardHeader className="pb-3">
+                  <div className="lg:col-span-2 flex flex-col">
+                    <Card className="flex-1 flex flex-col">
+                      <CardHeader className="pb-3 flex-shrink-0">
                         <CardTitle className="text-base">{parentCat.name} - Features</CardTitle>
                       </CardHeader>
-                      <CardContent className="h-full overflow-y-auto space-y-4 pb-20">
+                      <CardContent className="flex-1 overflow-y-auto space-y-4">
                         {categories.filter(c => c.parentId === parentCat.id || parentCat.id === 76 && c.id === 76) // Special handling for Painting
                     .map(subCat => {
                       const features = featureTypes.filter(ft => ft.categoryId === subCat.id);
@@ -286,10 +286,9 @@ export default function GenerateQuotation() {
                   </div>
 
                   {/* Right Panel - Preview (60%) */}
-                  <div className="lg:col-span-3">
-                    <Card className="h-full">
-                      
-                      <CardContent className="h-full flex flex-col">
+                  <div className="lg:col-span-3 flex flex-col">
+                    <Card className="flex-1 flex flex-col">
+                      <CardContent className="flex-1 flex flex-col p-6">
                         <div className="bg-muted/30 rounded-lg flex-1 flex items-center justify-center relative">
                           <img src={getCurrentFeatureImage()} alt="Vehicle Preview" className="max-h-full max-w-full object-contain rounded" />
                           <div className="absolute top-2 right-2 flex gap-2">
@@ -307,6 +306,22 @@ export default function GenerateQuotation() {
                 </div>
               </TabsContent>)}
           </Tabs>
+        </div>
+
+        {/* Summary Footer */}
+        <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 py-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{Object.keys(selected).filter(key => selected[+key]).length}</span> features selected
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-lg font-bold">
+                Total: <span className="text-green-600">₹{total.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>;
   }
