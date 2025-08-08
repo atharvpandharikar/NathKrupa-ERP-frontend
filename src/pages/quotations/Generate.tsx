@@ -262,21 +262,21 @@ export default function GenerateQuotation() {
                       <CardHeader className="pb-3 flex-shrink-0">
                         <CardTitle className="text-base">{parentCat.name} - Features</CardTitle>
                       </CardHeader>
-                      <CardContent className="flex-1 overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-muted-foreground/30 scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground/50 transition-all duration-200">
+                      <CardContent className="flex-1 overflow-y-auto space-y-4 max-h-[calc(100vh-300px)] scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-background hover:scrollbar-thumb-border/60 transition-all duration-300 pr-2">
                         {categories.filter(c => c.parentId === parentCat.id || parentCat.id === 76 && c.id === 76) // Special handling for Painting
                     .map(subCat => {
                       const features = featureTypes.filter(ft => ft.categoryId === subCat.id);
                       if (features.length === 0) return null;
-                      return <div key={subCat.id} className="border rounded-lg p-4">
-                                <h3 className="font-medium mb-3">{subCat.name}</h3>
+                      return <div key={subCat.id} className="border rounded-lg p-4 animate-fade-in hover:shadow-sm transition-all duration-200">
+                                <h3 className="font-medium mb-3 text-foreground">{subCat.name}</h3>
                                 <div className="space-y-2">
-                                  {features.map(feature => <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50">
+                                  {features.map(feature => <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
                                       <input type="radio" name={`category-${subCat.id}`} checked={selected[subCat.id] === feature.id} onChange={() => setSelected({
                               ...selected,
                               [subCat.id]: feature.id
-                            })} className="text-primary" />
-                                      <span className="flex-1 text-sm">{feature.name}</span>
-                                      <Badge variant="outline" className="text-xs">₹{feature.base_cost}</Badge>
+                            })} className="text-primary transition-colors duration-150" />
+                                      <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{feature.name}</span>
+                                      <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{feature.base_cost}</Badge>
                                     </label>)}
                                 </div>
                               </div>;
