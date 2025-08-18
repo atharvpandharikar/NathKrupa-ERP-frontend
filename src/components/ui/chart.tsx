@@ -1,3 +1,4 @@
+/* eslint-disable no-inline-styles */
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
 
@@ -204,24 +205,26 @@ const ChartTooltipContent = React.forwardRef<
                       <itemConfig.icon />
                     ) : (
                       !hideIndicator && (
-                        <div
-                          className={cn(
-                            "shrink-0 rounded-[2px] border-[--color-border] bg-[--color-bg]",
-                            {
-                              "h-2.5 w-2.5": indicator === "dot",
-                              "w-1": indicator === "line",
-                              "w-0 border-[1.5px] border-dashed bg-transparent":
-                                indicator === "dashed",
-                              "my-0.5": nestLabel && indicator === "dashed",
-                            }
-                          )}
-                          style={
-                            {
-                              "--color-bg": indicatorColor,
-                              "--color-border": indicatorColor,
-                            } as React.CSSProperties
-                          }
-                        />
+                        indicator === "dot" ? (
+                          <svg width={10} height={10} className="shrink-0" aria-hidden="true">
+                            <rect width={10} height={10} rx={2} fill={indicatorColor} stroke={indicatorColor} />
+                          </svg>
+                        ) : indicator === "line" ? (
+                          <svg width={4} height={10} className="shrink-0" aria-hidden="true">
+                            <rect width={2} height={10} x={1} fill={indicatorColor} />
+                          </svg>
+                        ) : (
+                          <svg width={10} height={10} className="shrink-0" aria-hidden="true">
+                            <rect
+                              width={10}
+                              height={10}
+                              rx={2}
+                              fill="none"
+                              stroke={indicatorColor}
+                              strokeDasharray="2 2"
+                            />
+                          </svg>
+                        )
                       )
                     )}
                     <div
@@ -297,12 +300,9 @@ const ChartLegendContent = React.forwardRef<
               {itemConfig?.icon && !hideIcon ? (
                 <itemConfig.icon />
               ) : (
-                <div
-                  className="h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{
-                    backgroundColor: item.color,
-                  }}
-                />
+                <svg width={10} height={10} className="shrink-0" aria-hidden="true">
+                  <rect width={10} height={10} rx={2} fill={item.color} stroke={item.color} />
+                </svg>
               )}
               {itemConfig?.label}
             </div>

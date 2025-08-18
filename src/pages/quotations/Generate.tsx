@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
+// import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +10,26 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { vehicleTypes, vehicleMakers, getMakerModels, getTypeMakers, categories, featureTypes, saveQuotation } from "@/mock/data";
-import type { QuotationData } from "@/types";
+import { api } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, type CarouselApi } from "@/components/ui/carousel";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+// Backend types
+interface VehicleType { id: number; name: string; code: string }
+interface VehicleMaker { id: number; name: string }
+interface VehicleModel { id: number; name: string; maker: VehicleMaker; vehicle_type: VehicleType }
+interface FeatureCategory { id: number; name: string; parent: number | null }
+interface FeatureType { id: number; name: string; category: FeatureCategory }
+interface FeaturePrice { id: number; price: string | number; vehicle_model: VehicleModel; feature_type?: FeatureType | null; feature_category: FeatureCategory }
+interface FeatureImage { id: number; image: string; alt_text?: string | null; feature_price?: number }
+
+const API_ROOT: string = (import.meta as any).env?.VITE_API_ROOT || "http://127.0.0.1:8000";
+function fullImageUrl(path: string) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  if (path.startsWith("/")) return `${API_ROOT}${path}`;
+  return `${API_ROOT}/${path}`;
+}
 type CustomerInfo = {
   name: string;
   phone: string;
@@ -19,10 +37,25 @@ type CustomerInfo = {
   vehicleNumber: string;
 };
 
+type Customer = {
+  id: number;
+  name: string;
+  phone_number: string;
+  whatsapp_number?: string | null;
+  email?: string | null;
+  address?: string | null;
+  city?: string | null;
+};
+
 export default function GenerateQuotation() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [vehicle, setVehicle] = useState<QuotationData["vehicle"]>({
+  // Vehicle selectors (backend)
+  const [vTypes, setVTypes] = useState<VehicleType[]>([]);
+  const [makers, setMakers] = useState<VehicleMaker[]>([]);
+  const [modelsByType, setModelsByType] = useState<VehicleModel[]>([]);
+  const [modelsForMaker, setModelsForMaker] = useState<VehicleModel[]>([]);
+  const [vehicle, setVehicle] = useState<{ typeId: number | null; makerId: number | null; modelId: number | null; variant: string }>({
     typeId: null,
     makerId: null,
     modelId: null,
@@ -31,7 +64,32 @@ export default function GenerateQuotation() {
   const [selected, setSelected] = useState<{
     [categoryId: number]: number | null;
   }>({});
-  const [activeParentCategory, setActiveParentCategory] = useState(10); // Default to "Front Section"
+  // Backend categories/types
+  const [cats, setCats] = useState<FeatureCategory[]>([]);
+  const parentCats = useMemo(() => cats.filter(c => c.parent == null), [cats]);
+  const [activeParentCategory, setActiveParentCategory] = useState<number | null>(null);
+  const subCats = useMemo(() => (pid: number) => cats.filter(c => c.parent === pid), [cats]);
+  // Desired parent category order
+  const normalize = (s: string) => s.trim().toLowerCase();
+  const parentNameOrder: Record<string, number> = useMemo(() => ({
+    [normalize('Front Section')]: 0,
+    [normalize('Side Section')]: 1,
+    [normalize('On Chassis / Underbody')]: 2,
+    [normalize('Inside Cargo Body')]: 3,
+    [normalize('Rear Section')]: 4,
+    [normalize('Painting')]: 5,
+    [normalize('Accessories')]: 6,
+  }), []);
+  const sortKey = (name: string) => parentNameOrder[normalize(name)] ?? 999;
+  const parentCategories = useMemo(() => {
+    return [...parentCats].sort((a, b) => sortKey(a.name) - sortKey(b.name));
+  }, [parentCats]);
+  const [typesForModel, setTypesForModel] = useState<FeatureType[]>([]);
+  // Map feature_type.id => { price, fpId }
+  const [featurePriceMap, setFeaturePriceMap] = useState<Record<number, { price: number; fpId: number }>>({});
+  // Images cache: feature_type.id => images
+  const [imagesByFt, setImagesByFt] = useState<Record<number, FeatureImage[] | null>>({});
+  const [loadingImagesByFt, setLoadingImagesByFt] = useState<Record<number, boolean>>({});
   const [selectedFeaturesOpen, setSelectedFeaturesOpen] = useState(false);
   const [customFeature, setCustomFeature] = useState({
     category: "",
@@ -45,17 +103,89 @@ export default function GenerateQuotation() {
     email: "",
     vehicleNumber: ""
   });
+  const [customerAddress, setCustomerAddress] = useState<string>("");
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | "">("");
+  const customerOptions: ComboboxOption[] = useMemo(() => customers.map(c => ({
+    value: String(c.id),
+    label: `${c.name} • ${c.phone_number}${c.city ? ` • ${c.city}` : ""}`
+  })), [customers]);
   const [errors, setErrors] = useState<Partial<CustomerInfo>>({});
   useEffect(() => {
     document.title = "Generate Quotation | Nathkrupa ERP";
+    // load vehicle types, makers, and categories
+    Promise.all([
+      api.get<VehicleType[]>("/vehicle-types/"),
+      api.get<VehicleMaker[]>("/vehicle-makers/"),
+      api.get<FeatureCategory[]>("/feature-categories/")
+    ]).then(([vt, mk, fc]) => {
+      setVTypes(vt);
+      setMakers(mk);
+      setCats(fc);
+      const parents = fc.filter(c => c.parent == null);
+      const sorted = [...parents].sort((a, b) => sortKey(a.name) - sortKey(b.name));
+      if (sorted[0]) setActiveParentCategory(sorted[0].id);
+    }).catch(() => toast({ title: 'Failed to load initial data', variant: 'destructive' }));
+    // Prefetch customers (first page or list)
+    api.get<any>("/customers/")
+      .then((res) => {
+        const list = Array.isArray(res) ? res : (res?.results ?? []);
+        setCustomers(list as Customer[]);
+      })
+      .catch(() => {});
   }, []);
+
+  // When vehicle type changes, load models by type
+  useEffect(() => {
+    if (!vehicle.typeId) { setModelsByType([]); setModelsForMaker([]); return; }
+    api.get<VehicleModel[]>(`/vehicle-models/by_vehicle_type/?vehicle_type_id=${vehicle.typeId}`)
+      .then(ms => {
+        setModelsByType(ms);
+        const validMakerIds = new Set(ms.map(m => m.maker.id));
+        if (vehicle.makerId && !validMakerIds.has(vehicle.makerId)) {
+          setVehicle(v => ({ ...v, makerId: null, modelId: null }));
+        }
+      })
+      .catch(() => toast({ title: 'Failed to load models', variant: 'destructive' }));
+  }, [vehicle.typeId]);
+
+  // When maker changes, filter models client-side
+  useEffect(() => {
+    if (!vehicle.makerId) { setModelsForMaker([]); return; }
+    const filtered = modelsByType.filter(m => m.maker.id === vehicle.makerId);
+    setModelsForMaker(filtered);
+    if (vehicle.modelId && !filtered.some(m => m.id === vehicle.modelId)) {
+      setVehicle(v => ({ ...v, modelId: null }));
+    }
+  }, [vehicle.makerId, modelsByType]);
+
+  // When model changes, load types and prices for that model
+  useEffect(() => {
+  if (!vehicle.modelId) { setTypesForModel([]); setFeaturePriceMap({}); setImagesByFt({}); setLoadingImagesByFt({}); return; }
+    Promise.all([
+      api.get<FeatureType[]>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}`),
+      api.get<FeaturePrice[]>(`/feature-prices/?vehicle_model=${vehicle.modelId}`)
+    ]).then(([fts, fps]) => {
+      setTypesForModel(fts);
+      const map: Record<number, { price: number; fpId: number }> = {};
+      for (const fp of fps) {
+        if (fp.feature_type && fp.feature_type.id) {
+          const priceNum = typeof fp.price === 'string' ? parseFloat(fp.price) : fp.price;
+          if (!Number.isNaN(priceNum)) map[fp.feature_type.id] = { price: priceNum, fpId: fp.id };
+        }
+      }
+      setFeaturePriceMap(map);
+      setImagesByFt({});
+      setLoadingImagesByFt({});
+    }).catch(() => toast({ title: 'Failed to load features/prices', variant: 'destructive' }));
+  }, [vehicle.modelId]);
   const total = useMemo(() => {
-    return Object.values(selected).reduce((sum, featureTypeId) => {
+    return Object.values(selected).reduce((sum: number, featureTypeId) => {
       if (!featureTypeId) return sum;
-      const ft = featureTypes.find(f => f.id === featureTypeId);
-      return sum + (ft?.base_cost || 0);
+      const price = featurePriceMap[featureTypeId]?.price ?? 0;
+      return sum + price;
     }, 0);
-  }, [selected]);
+  }, [selected, featurePriceMap]);
   const addCustomFeature = () => {
     if (customFeature.category && customFeature.name && customFeature.price) {
       setCustomFeatures([...customFeatures, {
@@ -67,7 +197,7 @@ export default function GenerateQuotation() {
     }
   };
 
-  const totalWithCustom = total + customFeatures.reduce((sum, cf) => sum + cf.price, 0);
+  const totalWithCustom = Number(total || 0) + customFeatures.reduce((sum, cf) => sum + cf.price, 0);
 
   const validateCustomerInfo = () => {
     const newErrors: Partial<CustomerInfo> = {};
@@ -94,20 +224,40 @@ export default function GenerateQuotation() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const finalize = () => {
-    if (!validateCustomerInfo()) {
+  const finalize = async () => {
+    if (!validateCustomerInfo()) return;
+    if (!vehicle.makerId || !vehicle.modelId) {
+      toast({ title: 'Select vehicle maker and model', variant: 'destructive' });
       return;
     }
-    
-    const newQuote: QuotationData = {
-      id: `QUO-${Date.now()}`,
-      vehicle,
-      selectedFeatures: selected,
-      total: totalWithCustom,
-      created_at: new Date().toISOString()
-    };
-    saveQuotation(newQuote);
-    navigate(`/quotations/${newQuote.id}`);
+    try {
+      const features = Object.entries(selected)
+        .filter(([, ftId]) => !!ftId)
+        .map(([_, ftId]) => {
+          const id = ftId as number;
+          const unit_price = featurePriceMap[id]?.price ?? 0;
+          return { feature_type_id: id, quantity: 1, unit_price };
+        });
+      // Note: customFeatures are not part of the formal schema yet; can be added later as AddedFeatures on Bill
+      const customFeaturePayloads = customFeatures.map(cf => ({ custom_name: cf.name, quantity: 1, unit_price: cf.price }));
+  const payload: any = {
+        vehicle_maker: vehicle.makerId,
+        vehicle_model: vehicle.modelId,
+        vehicle_number: customerInfo.vehicleNumber || '',
+        customer_name: customerInfo.name,
+        customer_phone: customerInfo.phone,
+        customer_email: customerInfo.email || '',
+        customer_address: customerAddress || '',
+        features: [...features, ...customFeaturePayloads],
+      };
+  if (selectedCustomerId) payload.customer_id = Number(selectedCustomerId);
+      await api.post<any>(`/quotations/`, payload);
+      toast({ title: 'Quotation created' });
+      navigate(`/quotations`);
+    } catch (e: any) {
+      const msg = typeof e?.message === 'string' ? e.message : 'Failed to create quotation';
+      toast({ title: msg, variant: 'destructive' });
+    }
   };
   const clearAllSelections = () => {
     setSelected({});
@@ -120,38 +270,16 @@ export default function GenerateQuotation() {
   };
   const getSelectedVehicleName = () => {
     if (vehicle.typeId && vehicle.makerId && vehicle.modelId) {
-      const type = vehicleTypes.find(vt => vt.id === vehicle.typeId);
-      const maker = vehicleMakers.find(vm => vm.id === vehicle.makerId);
-      const model = getMakerModels(vehicle.makerId).find(md => md.id === vehicle.modelId);
-      return `${type?.name} - ${maker?.name} ${model?.name}`;
+      const type = vTypes.find(vt => vt.id === vehicle.typeId);
+      const maker = makers.find(vm => vm.id === vehicle.makerId);
+      const model = modelsByType.find(md => md.id === vehicle.modelId);
+      return `${type?.name || ''} - ${maker?.name || ''} ${model?.name || ''}`.trim();
     }
     return "No vehicle selected";
   };
 
   // Parent categories for horizontal tabs
-  const parentCategories = [{
-    id: 10,
-    name: "Front Section"
-  }, {
-    id: 30,
-    name: "Rear Section"
-  }, {
-    id: 40,
-    name: "Side Section"
-  }, {
-    id: 50,
-    name: "Inside Cargo Body"
-  }, {
-    id: 60,
-    name: "On Chassis / Underbody"
-  }, {
-    id: 70,
-    name: "Accessories"
-  }, {
-    id: 76,
-    name: "Painting"
-  } // Adding painting as separate category
-  ];
+  // parentCategories already sorted via memo above
 
   // Get current feature image based on selected features
   const getCurrentFeatureImage = () => {
@@ -175,6 +303,7 @@ export default function GenerateQuotation() {
         // Accessories
         76: "/src/assets/vehicle-preview.jpg" // Painting
       };
+      if (activeParentCategory == null) return "/src/assets/vehicle-preview.jpg";
       return categoryImages[activeParentCategory] || "/src/assets/vehicle-preview.jpg";
     }
     return "/src/assets/vehicle-preview.jpg";
@@ -204,7 +333,7 @@ export default function GenerateQuotation() {
                     <SelectValue placeholder="Select Vehicle Type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {vehicleTypes.map(vt => <SelectItem key={vt.id} value={vt.id.toString()}>{vt.name}</SelectItem>)}
+                    {vTypes.map(vt => <SelectItem key={vt.id} value={vt.id.toString()}>{vt.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -220,14 +349,16 @@ export default function GenerateQuotation() {
                       <SelectValue placeholder="Select Maker" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getTypeMakers(vehicle.typeId).map(mk => <SelectItem key={mk.id} value={mk.id.toString()}>{mk.name}</SelectItem>)}
+                      {[...new Map(modelsByType.map(m => [m.maker.id, m.maker])).values()].map(mk => (
+                        <SelectItem key={mk.id} value={mk.id.toString()}>{mk.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>}
 
               {vehicle.makerId && <div>
                   <label className="text-sm font-medium mb-2 block">Model</label>
-                  <Select value={vehicle.modelId?.toString() || ""} onValueChange={v => setVehicle({
+          <Select value={vehicle.modelId?.toString() || ""} onValueChange={v => setVehicle({
                 ...vehicle,
                 modelId: +v
               })}>
@@ -235,7 +366,7 @@ export default function GenerateQuotation() {
                       <SelectValue placeholder="Select Model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getMakerModels(vehicle.makerId).map(md => <SelectItem key={md.id} value={md.id.toString()}>{md.name}</SelectItem>)}
+            {modelsForMaker.map(md => <SelectItem key={md.id} value={md.id.toString()}>{md.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>}
@@ -278,8 +409,8 @@ export default function GenerateQuotation() {
                 </SheetHeader>
                 <div className="mt-6 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-background hover:scrollbar-thumb-border/60 transition-all duration-300 pr-2">
                   {Object.entries(selected).filter(([, featureTypeId]) => featureTypeId).map(([categoryId, featureTypeId]) => {
-                  const category = categories.find(c => c.id === +categoryId);
-                  const feature = featureTypes.find(f => f.id === featureTypeId);
+                  const category = cats.find(c => c.id === +categoryId);
+                  const feature = typesForModel.find(f => f.id === featureTypeId);
                   return <div key={categoryId} className="flex items-center justify-between p-3 border rounded-lg animate-fade-in hover:shadow-sm transition-all duration-200 hover:scale-[1.01] group">
                           <div className="flex-1">
                             <div className="font-medium text-sm group-hover:text-foreground transition-colors duration-150">{feature?.name}</div>
@@ -287,7 +418,7 @@ export default function GenerateQuotation() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 group-hover:bg-green-200 dark:group-hover:bg-green-800/30 transition-colors duration-150">
-                              ₹{feature?.base_cost}
+                              ₹{(feature ? (featurePriceMap[feature.id]?.price ?? 0) : 0).toLocaleString()}
                             </Badge>
                             <Button variant="ghost" size="sm" onClick={() => removeFeature(+categoryId)} className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive transition-all duration-150">
                               <X className="h-3 w-3" />
@@ -299,7 +430,7 @@ export default function GenerateQuotation() {
                   <div className="border-t pt-4 mt-4 sticky bottom-0 bg-background/95 backdrop-blur -mb-6">
                     <div className="flex justify-between items-center text-lg font-bold">
                       <span>Total Price</span>
-                      <span className="text-green-600">₹{total.toLocaleString()}</span>
+                      <span className="text-green-600">₹{Number(total || 0).toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -312,11 +443,13 @@ export default function GenerateQuotation() {
 
         {/* Horizontal Parent Category Tabs */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Tabs value={activeParentCategory.toString()} onValueChange={value => setActiveParentCategory(parseInt(value))} className="flex flex-col h-full">
+          <Tabs value={(activeParentCategory ?? '').toString()} onValueChange={value => setActiveParentCategory(parseInt(value))} className="flex flex-col h-full">
             <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 mb-4 h-auto mx-6 flex-shrink-0">
-              {parentCategories.map(cat => <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm whitespace-normal text-center h-auto py-3 leading-tight">
+              {parentCategories.map(cat => (
+                <TabsTrigger key={cat.id} value={cat.id.toString()} className="text-xs sm:text-sm whitespace-normal text-center h-auto py-3 leading-tight">
                   {cat.name}
-                </TabsTrigger>)}
+                </TabsTrigger>
+              ))}
             </TabsList>
 
             {parentCategories.map(parentCat => <TabsContent key={parentCat.id} value={parentCat.id.toString()} className="flex-1 overflow-hidden">
@@ -328,24 +461,32 @@ export default function GenerateQuotation() {
                         <CardTitle className="text-base">{parentCat.name} - Features</CardTitle>
                       </CardHeader>
                       <CardContent className="flex-1 overflow-y-auto space-y-4 max-h-[calc(100vh-300px)] scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-background hover:scrollbar-thumb-border/60 transition-all duration-300 pr-2">
-                        {categories.filter(c => c.parentId === parentCat.id || parentCat.id === 76 && c.id === 76) // Special handling for Painting
-                    .map(subCat => {
-                      const features = featureTypes.filter(ft => ft.categoryId === subCat.id);
-                      if (features.length === 0) return null;
-                      return <div key={subCat.id} className="border rounded-lg p-4 animate-fade-in hover:shadow-sm transition-all duration-200">
-                                <h3 className="font-medium mb-3 text-foreground">{subCat.name}</h3>
-                                <div className="space-y-2">
-                                  {features.map(feature => <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
-                                      <input type="radio" name={`category-${subCat.id}`} checked={selected[subCat.id] === feature.id} onChange={() => setSelected({
-                              ...selected,
-                              [subCat.id]: feature.id
-                            })} className="text-primary transition-colors duration-150" />
-                                      <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{feature.name}</span>
-                                      <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{feature.base_cost}</Badge>
-                                    </label>)}
-                                </div>
-                              </div>;
-                    })}
+                        {subCats(parentCat.id).map(subCat => {
+                          const features = typesForModel.filter(ft => ft.category.id === subCat.id);
+                          if (features.length === 0) return null;
+                          return (
+                            <div key={subCat.id} className="border rounded-lg p-4 animate-fade-in hover:shadow-sm transition-all duration-200">
+                              <h3 className="font-medium mb-3 text-foreground">{subCat.name}</h3>
+                              <div className="space-y-2">
+                                {features.map(feature => (
+                                  <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
+                                    <input
+                                      type="radio"
+                                      name={`category-${subCat.id}`}
+                                      checked={selected[subCat.id] === feature.id}
+                                      onChange={() => {
+                                        setSelected({ ...selected, [subCat.id]: feature.id });
+                                      }}
+                                      className="text-primary transition-colors duration-150"
+                                    />
+                                    <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{feature.name}</span>
+                                    <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{(featurePriceMap[feature.id]?.price ?? 0).toLocaleString()}</Badge>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </CardContent>
                     </Card>
                   </div>
@@ -354,8 +495,30 @@ export default function GenerateQuotation() {
                   <div className="lg:col-span-3 flex flex-col">
                     <Card className="flex-1 flex flex-col">
                       <CardContent className="flex-1 flex flex-col p-6">
-                        <div className="bg-muted/30 rounded-lg flex-1 flex items-center justify-center relative">
-                          <img src={getCurrentFeatureImage()} alt="Vehicle Preview" className="max-h-full max-w-full object-contain rounded" />
+                        <div className="bg-muted/30 rounded-lg relative w-full h-[420px] md:h-[480px] overflow-hidden flex items-center justify-center">
+                          <FeaturePreviewCarousel
+                            activeParentCategory={activeParentCategory}
+                            cats={cats}
+                            selected={selected}
+                            featurePriceMap={featurePriceMap}
+                            imagesByFt={imagesByFt}
+                            loadingImagesByFt={loadingImagesByFt}
+                            onNeedImages={async (ftId: number) => {
+                              if (!vehicle.modelId) return;
+                              const entry = featurePriceMap[ftId];
+                              if (!entry) { setImagesByFt(prev => ({ ...prev, [ftId]: [] })); return; }
+                              if (loadingImagesByFt[ftId]) return;
+                              try {
+                                setLoadingImagesByFt(prev => ({ ...prev, [ftId]: true }));
+                                const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${entry.fpId}`);
+                                setImagesByFt(prev => ({ ...prev, [ftId]: imgs }));
+                              } catch {
+                                setImagesByFt(prev => ({ ...prev, [ftId]: [] }));
+                              } finally {
+                                setLoadingImagesByFt(prev => ({ ...prev, [ftId]: false }));
+                              }
+                            }}
+                          />
                           <div className="absolute top-2 right-2 flex gap-2">
                             <Badge variant="secondary" className="text-xs">
                               {parentCat.name}
@@ -363,7 +526,7 @@ export default function GenerateQuotation() {
                           </div>
                         </div>
                         <div className="text-sm text-muted-foreground text-center mt-4">
-                          {vehicle.typeId && vehicle.makerId && vehicle.modelId ? `${vehicleTypes.find(vt => vt.id === vehicle.typeId)?.name} - ${vehicleMakers.find(vm => vm.id === vehicle.makerId)?.name}` : "Select vehicle configuration"}
+                          {vehicle.typeId && vehicle.makerId && vehicle.modelId ? `${vTypes.find(vt => vt.id === vehicle.typeId)?.name} - ${makers.find(vm => vm.id === vehicle.makerId)?.name}` : "Select vehicle configuration"}
                         </div>
                       </CardContent>
                     </Card>
@@ -383,7 +546,7 @@ export default function GenerateQuotation() {
             </div>
             <div className="flex items-center gap-4">
               <div className="text-lg font-bold">
-                Total: <span className="text-green-600">₹{total.toLocaleString()}</span>
+                Total: <span className="text-green-600">₹{Number(total || 0).toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -393,15 +556,86 @@ export default function GenerateQuotation() {
 
   // Step 3: Review
 
-  const selectedFeaturesList = Object.entries(selected).filter(([, featureTypeId]) => featureTypeId).map(([categoryId, featureTypeId]) => {
-    const category = categories.find(c => c.id === +categoryId);
-    const feature = featureTypes.find(f => f.id === featureTypeId);
-    return {
-      category: category?.name,
-      feature: feature?.name,
-      cost: feature?.base_cost || 0
-    };
-  });
+  const selectedFeaturesList = Object.entries(selected)
+    .filter(([, featureTypeId]) => featureTypeId)
+    .map(([categoryId, featureTypeId]) => {
+      const category = cats.find(c => c.id === +categoryId);
+      const feature = typesForModel.find(f => f.id === featureTypeId);
+      const cost = feature ? (featurePriceMap[feature.id]?.price ?? 0) : 0;
+      return { category: category?.name, feature: feature?.name, cost };
+    });
+
+  // Local Feature Preview component
+  function FeaturePreviewCarousel(props: {
+    activeParentCategory: number | null;
+    cats: FeatureCategory[];
+    selected: { [categoryId: number]: number | null };
+    featurePriceMap: Record<number, { price: number; fpId: number }>;
+    imagesByFt: Record<number, FeatureImage[] | null>;
+    loadingImagesByFt: Record<number, boolean>;
+    onNeedImages: (ftId: number) => void | Promise<void>;
+  }) {
+    const { activeParentCategory, cats, selected, featurePriceMap, imagesByFt, loadingImagesByFt, onNeedImages } = props;
+    const currentFtId = useMemo(() => {
+      if (!activeParentCategory) return null;
+      const subIds = cats.filter(c => c.parent === activeParentCategory).map(c => c.id);
+      for (const cid of subIds) {
+        const ftId = selected[cid];
+        if (ftId) return ftId;
+      }
+      return null;
+    }, [activeParentCategory, cats, selected]);
+
+    useEffect(() => {
+      if (!currentFtId) return;
+      if (!(currentFtId in featurePriceMap)) return; // no FP for this feature
+      if (imagesByFt[currentFtId] === undefined) {
+        onNeedImages(currentFtId);
+      }
+    }, [currentFtId, featurePriceMap, imagesByFt, onNeedImages]);
+
+    if (!currentFtId || !(currentFtId in featurePriceMap)) {
+  return <img src={getCurrentFeatureImage()} alt="Vehicle Preview" className="h-full w-full object-contain" />;
+    }
+    const loading = !!loadingImagesByFt[currentFtId];
+    const images = imagesByFt[currentFtId];
+    const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
+    const [currentIdx, setCurrentIdx] = useState(0);
+
+    useEffect(() => {
+      if (!carouselApi) return;
+      const onSelect = () => setCurrentIdx(carouselApi.selectedScrollSnap() || 0);
+      onSelect();
+      carouselApi.on('select', onSelect);
+      return () => { carouselApi.off('select', onSelect as any); };
+    }, [carouselApi]);
+    if (loading) {
+      return <div className="p-8 text-muted-foreground">Loading images…</div>;
+    }
+    if (!images || images.length === 0) {
+  return <img src={getCurrentFeatureImage()} alt="Vehicle Preview" className="h-full w-full object-contain" />;
+    }
+    return (
+      <div className="w-full h-full">
+        <Carousel className="w-full h-full" setApi={setCarouselApi}>
+          <CarouselContent className="h-full">
+            {images.map(img => (
+              <CarouselItem key={img.id} className="h-full">
+                <div className="flex items-center justify-center h-full w-full">
+                  <img src={fullImageUrl(img.image)} alt={img.alt_text || ''} className="h-full w-full object-contain" />
+                </div>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          <CarouselPrevious className="left-2" />
+          <CarouselNext className="right-2" />
+          <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md">
+            {Math.min(currentIdx + 1, images.length)}/{images.length}
+          </div>
+        </Carousel>
+      </div>
+    );
+  }
 
 
   return <section className="space-y-6">
@@ -501,7 +735,9 @@ export default function GenerateQuotation() {
         </Card>
       </div>
 
-      <div className="text-right text-xl font-bold">Total: ₹{totalWithCustom.toLocaleString()}</div>
+      <div className="flex justify-end">
+        <div className="text-xl font-bold sticky bottom-0">Total: ₹{totalWithCustom.toLocaleString()}</div>
+      </div>
 
       {/* Customer Information Form */}
       <Card className="max-w-6xl">
@@ -510,6 +746,31 @@ export default function GenerateQuotation() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-2">
+              <Label>Select Existing Customer</Label>
+              <Combobox
+                value={selectedCustomerId}
+                onChange={(val) => {
+                  setSelectedCustomerId(val);
+                  if (!val) return;
+                  const found = customers.find(c => String(c.id) === val);
+                  if (found) {
+                    setCustomerInfo({
+                      name: found.name,
+                      phone: found.phone_number || "",
+                      email: found.email || "",
+                      vehicleNumber: customerInfo.vehicleNumber,
+                    });
+                    setCustomerAddress(found.address || "");
+                  }
+                }}
+                options={customerOptions}
+                placeholder="Search by name or phone"
+                searchPlaceholder="Type to filter..."
+                emptyText="No customers"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Pick a previous customer to auto-fill details, or leave empty to add a new one.</p>
+            </div>
             <div>
               <Label htmlFor="customerName">Name *</Label>
               <Input
@@ -561,6 +822,16 @@ export default function GenerateQuotation() {
                 className={errors.vehicleNumber ? "border-destructive" : ""}
               />
               {errors.vehicleNumber && <p className="text-sm text-destructive mt-1">{errors.vehicleNumber}</p>}
+            </div>
+            <div className="md:col-span-4">
+              <Label htmlFor="customerAddress">Address</Label>
+              <textarea
+                id="customerAddress"
+                placeholder="Customer address"
+                className="w-full px-3 py-2 border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring min-h-[80px]"
+                value={customerAddress}
+                onChange={(e) => setCustomerAddress(e.target.value)}
+              />
             </div>
           </div>
         </CardContent>

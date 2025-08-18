@@ -8,7 +8,7 @@ export default function MainLayout() {
   const location = useLocation();
   const [open, setOpen] = useLocalStorage<boolean>("nk:sidebar-open", true);
   
-  // Hide sidebar for quote generation page
+  // Hide sidebar for quote generation page, but keep navbar
   const shouldHideSidebar = location.pathname === '/quotations/generate';
   const sidebarOpen = shouldHideSidebar ? false : open;
 
@@ -17,9 +17,18 @@ export default function MainLayout() {
       <div className="flex w-full min-h-screen">
         {!shouldHideSidebar && (
           <Sidebar collapsible="icon" variant="inset">
-            <SidebarContent>
+            <SidebarContent className="overflow-visible">
               <SidebarGroup>
-                <SidebarGroupLabel>Nathkrupa ERP</SidebarGroupLabel>
+                <SidebarGroupLabel>
+                  <span className="inline-flex items-center gap-2">
+                    <img
+                      src="https://shop-nathkrupabody.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder+(1).ico"
+                      alt="Nathkrupa"
+                      className="h-4 w-4"
+                    />
+                    <span>Nathkrupa ERP</span>
+                  </span>
+                </SidebarGroupLabel>
                 <SidebarGroupContent>
                   <SidebarMenu>
                     <AppSidebar />
@@ -31,8 +40,8 @@ export default function MainLayout() {
         )}
 
         <SidebarInset className={shouldHideSidebar ? "w-full" : ""}>
-          {!shouldHideSidebar && <Navbar />}
-          <div className={shouldHideSidebar ? "p-4 md:p-6 w-full" : "p-4 md:p-6"}>
+          <Navbar />
+          <div className={shouldHideSidebar ? "pt-4 md:pt-6 px-4 md:px-6 w-full" : "pt-4 md:pt-6 px-4 md:px-6"}>
             <Outlet />
           </div>
         </SidebarInset>

@@ -1,8 +1,10 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Link } from "react-router-dom";
-import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { useEffect, useMemo } from "react";
 
 export function Navbar() {
+  const location = useLocation();
+
   useEffect(() => {
     // Ensure viewport meta exists
     let vp = document.querySelector('meta[name="viewport"]');
@@ -14,14 +16,42 @@ export function Navbar() {
     }
   }, []);
 
+  const breadcrumb = useMemo(() => {
+    const path = location.pathname || '/';
+    if (path === '/' || path === '') return 'Dashboard';
+    const segments = path.split('/').filter(Boolean);
+    const map: Record<string,string> = {
+      quotations: 'Quotations',
+      generate: 'Generate Quote',
+      bills: 'Bills',
+      dashboard: 'Dashboard',
+      settings: 'Settings',
+      features: 'Features',
+      reports: 'Reports',
+      vehicles: 'Vehicles'
+    };
+    return segments.map((seg,i)=>{
+      if (/^\d+$/.test(seg)) return `#${seg}`; // numeric id
+      return map[seg] || (seg.charAt(0).toUpperCase()+seg.slice(1));
+    }).join(' / ');
+  }, [location.pathname]);
+
   return (
-    <header className="h-12 border-b bg-background flex items-center justify-between px-3">
-      <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-40 h-12 border-b bg-background/95 backdrop-blur flex items-center justify-between px-3">
+      <div className="flex items-center gap-3 min-w-0">
         <SidebarTrigger />
-        <Link to="/" className="font-semibold">Nathkrupa ERP</Link>
+        <Link to="/" className="font-semibold flex items-center gap-2 shrink-0">
+          <img
+            src="https://shop-nathkrupabody.s3.ap-south-1.amazonaws.com/favicon.ico"
+            alt="Nathkrupa"
+            className="h-5 w-5"
+          />
+          <span>Nathkrupa ERP</span>
+        </Link>
+        <div className="text-xs sm:text-sm text-muted-foreground truncate">/ {breadcrumb}</div>
       </div>
-      <nav className="text-sm">
-        <Link to="/quotations/generate" className="hover:underline">Generate Quote</Link>
+      <nav className="flex items-center gap-3 text-sm">
+        <Link to="/quotations/generate" className="hover:underline whitespace-nowrap">Generate Quote</Link>
       </nav>
     </header>
   );

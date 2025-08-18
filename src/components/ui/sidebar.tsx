@@ -131,6 +131,7 @@ const SidebarProvider = React.forwardRef<
       <SidebarContext.Provider value={contextValue}>
         <TooltipProvider delayDuration={0}>
           <div
+            // eslint-disable-next-line no-inline-styles
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH,
@@ -197,6 +198,7 @@ const Sidebar = React.forwardRef<
             data-sidebar="sidebar"
             data-mobile="true"
             className="w-[--sidebar-width] bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+            // eslint-disable-next-line no-inline-styles
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -669,6 +671,7 @@ const SidebarMenuSkeleton = React.forwardRef<
       <Skeleton
         className="h-4 flex-1 max-w-[--skeleton-width]"
         data-sidebar="menu-skeleton-text"
+        // eslint-disable-next-line no-inline-styles
         style={
           {
             "--skeleton-width": width,
