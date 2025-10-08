@@ -47,9 +47,35 @@ export type QuotationData = {
   selectedFeatures: { [categoryId: number]: number | null };
   total: number;
   created_at: string;
+  quotation_date: string;
 };
 
 export type QuotationCreated = QuotationData;
+
+export type WorkOrder = {
+  id: ID;
+  work_order_number: string;
+  quotation: QuotationData;
+  status: 'scheduled' | 'in_progress' | 'painting' | 'workdone' | 'completed' | 'delivered' | 'cancelled';
+  work_order_date: string;
+  appointment_date: string;
+  estimated_completion_days: number;
+  expected_delivery_date: string;
+  actual_delivery_date?: string;
+  quoted_price: number;
+  total_added_features_cost: number;
+  total_payments: number;
+  remaining_balance: number;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+  // Additional fields for work order to bill conversion
+  has_bill?: boolean;
+  bill_number?: string;
+  added_features?: any[];
+  payments?: any[];
+  job_notes?: any[];
+};
 
 export type Bill = {
   id: ID;
@@ -66,4 +92,9 @@ export type Bill = {
   grand_total: number;
   status: "Paid" | "Unpaid";
   created_at: string;
+  // Additional fields for work order to bill conversion
+  has_bill?: boolean;
+  is_test?: boolean;
+  bill_number?: string;
+  work_order_number?: string;
 };

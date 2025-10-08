@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, workOrdersApi, quotationApi, QuotationDiscount, featureApi, FeatureType, FeatureCategory, FeaturePrice, ManufacturingLoad } from "@/lib/api";
+import { api, workOrdersApi, quotationApi, QuotationDiscount, featureApi, FeatureType, FeatureCategory, FeaturePrice, ManufacturingLoad, API_ROOT, financeApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,11 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { WorkOrderDatePicker } from "@/components/ui/work-order-date-picker";
 
 type QuotationDetail = {
   id: number;
   quotation_number: string;
   created_at: string;
+  quotation_date: string;
   suggested_total: string | number;
   final_total?: string | number | null;
   status: string;
@@ -42,15 +45,21 @@ export default function QuotationDetails() {
   const [openConvert, setOpenConvert] = useState(false);
   const [openAddDiscount, setOpenAddDiscount] = useState(false);
   const [days, setDays] = useState<number>(3);
-  const [appt, setAppt] = useState<string>("");
+  const [workOrderDate, setWorkOrderDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [appt, setAppt] = useState<string>(new Date().toISOString().split('T')[0]);
   const [tokenAmt, setTokenAmt] = useState<string>("");
   const [suggestLoading, setSuggestLoading] = useState(false);
-  const [discMode, setDiscMode] = useState<'amount'|'percent'>('amount');
+  // Finance integration state
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
+  const [transactionImage, setTransactionImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<Array<{ id: number; nickname: string; account_name: string; account_type: string }>>([]);
+  const [discMode, setDiscMode] = useState<'amount' | 'percent'>('amount');
   const [discValue, setDiscValue] = useState<string>("");
   const [discNote, setDiscNote] = useState<string>("");
   const [discounts, setDiscounts] = useState<QuotationDiscount[]>([]);
-  const [discountTotals, setDiscountTotals] = useState<{ base_total: number; total_discount: number; discounted_total: number }|null>(null);
-  const [versions, setVersions] = useState<Array<{id:number; version:number; base_total:number; discount_total:number; discounted_total:number; note?:string; created_at:string; created_by?: { id:number; username:string } }>>([]);
+  const [discountTotals, setDiscountTotals] = useState<{ base_total: number; total_discount: number; discounted_total: number } | null>(null);
+  const [versions, setVersions] = useState<Array<{ id: number; version: number; base_total: number; discount_total: number; discounted_total: number; note?: string; created_at: string; created_by?: { id: number; username: string } }>>([]);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideValue, setOverrideValue] = useState<string>("");
   const [overrideNote, setOverrideNote] = useState<string>("");
@@ -69,7 +78,7 @@ export default function QuotationDetails() {
   const [featSearch, setFeatSearch] = useState("");
   const [selectedFeatureType, setSelectedFeatureType] = useState<number | null>(null);
   const [useCustom, setUseCustom] = useState(false);
-  
+
   // Manufacturing load state
   const [manufacturingLoad, setManufacturingLoad] = useState<ManufacturingLoad | null>(null);
   const [loadLoading, setLoadLoading] = useState(false);
@@ -87,77 +96,77 @@ export default function QuotationDetails() {
     quotationApi.listDiscounts(Number(id)).then((d) => {
       setDiscounts(d.items);
       setDiscountTotals({ base_total: d.base_total, total_discount: d.total_discount, discounted_total: d.discounted_total });
-    }).catch(() => {});
+    }).catch(() => { });
     // Load versions
-    api.get<Array<{id:number; version:number; base_total:number; discount_total:number; discounted_total:number; note?:string; created_at:string; created_by?: { id:number; username:string } }>>(`/quotations/${id}/versions/`).then(setVersions).catch(() => {});
+    api.get<Array<{ id: number; version: number; base_total: number; discount_total: number; discounted_total: number; note?: string; created_at: string; created_by?: { id: number; username: string } }>>(`/quotations/${id}/versions/`).then(setVersions).catch(() => { });
     // Preload feature types for related vehicle model (if quotation loaded later we'll refetch in another effect)
   }, [id]);
 
-  useEffect(()=>{
+  useEffect(() => {
     // no-op placeholder retained
-  },[quote]);
+  }, [quote]);
 
-  useEffect(()=>{
+  useEffect(() => {
     // When opening add feature dialog, fetch parent categories always; prices only if vehicle model known
     const vmId = (quote as any)?.vehicle_model_id; // optional
-    if(addFeatureOpen){
-      featureApi.parentCategories().then(setParentCategories).catch(()=>{});
+    if (addFeatureOpen) {
+      featureApi.parentCategories().then(setParentCategories).catch(() => { });
       // clear dependent selections each open
       setChildCategories([]);
       setSelectedParentCategoryId(null); setSelectedChildCategoryId(null);
       setSelectedFeatureType(null);
       setFeatSearch('');
       setFeatureTypes([]);
-      if(vmId){
-        featureApi.pricesByModel(vmId).then(setFeaturePrices).catch(()=>{});
+      if (vmId) {
+        featureApi.pricesByModel(vmId).then(setFeaturePrices).catch(() => { });
       } else {
         setFeaturePrices([]);
       }
     }
-  },[addFeatureOpen, quote]);
+  }, [addFeatureOpen, quote]);
 
   // Recompute suggested unit price when selection changes
-  useEffect(()=>{
-    if(!addFeatureOpen) return;
+  useEffect(() => {
+    if (!addFeatureOpen) return;
     const vmId = (quote as any)?.vehicle_model_id;
-    if(!vmId){ setAutoUnitPrice(null); return; }
-    if(useCustom){ setAutoUnitPrice(null); return; }
+    if (!vmId) { setAutoUnitPrice(null); return; }
+    if (useCustom) { setAutoUnitPrice(null); return; }
     // If feature type selected, find price by (vehicle_model + feature_type)
-    if(selectedFeatureType){
-      const fp = featurePrices.find(p=>p.feature_type && p.feature_type.id===selectedFeatureType);
-      if(fp){ setAutoUnitPrice(Number(fp.price)); if(!featUnitPrice) setFeatUnitPrice(String(fp.price)); return; }
+    if (selectedFeatureType) {
+      const fp = featurePrices.find(p => p.feature_type && p.feature_type.id === selectedFeatureType);
+      if (fp) { setAutoUnitPrice(Number(fp.price)); if (!featUnitPrice) setFeatUnitPrice(String(fp.price)); return; }
     }
     // else if only child category selected
-    if(selectedChildCategoryId){
-      const fp = featurePrices.find(p=>!p.feature_type && p.feature_category.id===selectedChildCategoryId);
-      if(fp){ setAutoUnitPrice(Number(fp.price)); if(!featUnitPrice) setFeatUnitPrice(String(fp.price)); return; }
+    if (selectedChildCategoryId) {
+      const fp = featurePrices.find(p => !p.feature_type && p.feature_category.id === selectedChildCategoryId);
+      if (fp) { setAutoUnitPrice(Number(fp.price)); if (!featUnitPrice) setFeatUnitPrice(String(fp.price)); return; }
     }
     setAutoUnitPrice(null);
-  },[selectedFeatureType, selectedChildCategoryId, featurePrices, addFeatureOpen, useCustom]);
+  }, [selectedFeatureType, selectedChildCategoryId, featurePrices, addFeatureOpen, useCustom]);
 
   // When parent category changes, load children
-  useEffect(()=>{
-    if(!addFeatureOpen) return;
-    if(selectedParentCategoryId==null){ setChildCategories([]); setSelectedChildCategoryId(null); return; }
-  featureApi.childCategories(selectedParentCategoryId).then(setChildCategories).catch(()=>{});
+  useEffect(() => {
+    if (!addFeatureOpen) return;
+    if (selectedParentCategoryId == null) { setChildCategories([]); setSelectedChildCategoryId(null); return; }
+    featureApi.childCategories(selectedParentCategoryId).then(setChildCategories).catch(() => { });
     setSelectedChildCategoryId(null); setSelectedFeatureType(null);
-  },[selectedParentCategoryId, addFeatureOpen]);
+  }, [selectedParentCategoryId, addFeatureOpen]);
 
   // When child category changes, load feature types for that category & vehicle model
-  useEffect(()=>{
+  useEffect(() => {
     const vmId = (quote as any)?.vehicle_model_id;
-    if(!addFeatureOpen){ return; }
-    if(selectedChildCategoryId){
-      if(vmId){
-        featureApi.byVehicleModel(vmId, selectedChildCategoryId).then(setFeatureTypes).catch(()=>{});
+    if (!addFeatureOpen) { return; }
+    if (selectedChildCategoryId) {
+      if (vmId) {
+        featureApi.byVehicleModel(vmId, selectedChildCategoryId).then(setFeatureTypes).catch(() => { });
       } else {
         // Fallback: generic feature types by category if model id missing
-        api.get<FeatureType[]>(`/feature-types/?category=${selectedChildCategoryId}`).then(setFeatureTypes).catch(()=>{});
+        api.get<FeatureType[]>(`/feature-types/?category=${selectedChildCategoryId}`).then(setFeatureTypes).catch(() => { });
       }
     } else {
       setFeatureTypes([]); setSelectedFeatureType(null);
     }
-  },[selectedChildCategoryId, addFeatureOpen, quote]);
+  }, [selectedChildCategoryId, addFeatureOpen, quote]);
 
   // Suggest earliest appointment when days change
   useEffect(() => {
@@ -171,7 +180,7 @@ export default function QuotationDetails() {
     }).finally(() => setSuggestLoading(false));
   }, [days]);
 
-  // Load manufacturing load when convert dialog opens
+  // Load manufacturing load and accounts when convert dialog opens
   useEffect(() => {
     if (openConvert && !manufacturingLoad) {
       setLoadLoading(true);
@@ -179,15 +188,46 @@ export default function QuotationDetails() {
         .then(setManufacturingLoad)
         .catch((e) => {
           console.error('Failed to load manufacturing load:', e);
-          toast({ 
-            title: 'Warning', 
-            description: 'Could not load current manufacturing load', 
-            variant: 'destructive' 
+          toast({
+            title: 'Warning',
+            description: 'Could not load current manufacturing load',
+            variant: 'destructive'
           });
         })
         .finally(() => setLoadLoading(false));
     }
-  }, [openConvert, manufacturingLoad]);
+
+    // Load accounts for finance integration
+    if (openConvert && accounts.length === 0) {
+      financeApi.get<Array<{ id: number; nickname: string; account_name: string; account_type: string }>>('/accounts/')
+        .then(setAccounts)
+        .catch((e) => {
+          console.error('Failed to load accounts:', e);
+          toast({
+            title: 'Warning',
+            description: 'Could not load finance accounts',
+            variant: 'destructive'
+          });
+        });
+    }
+  }, [openConvert, manufacturingLoad, accounts.length]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setTransactionImage(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setTransactionImage(null);
+    setImagePreview(null);
+  };
 
   async function handleConvert() {
     try {
@@ -196,17 +236,28 @@ export default function QuotationDetails() {
         toast({ title: 'Missing fields', description: 'Please set appointment date and days', variant: 'destructive' });
         return;
       }
+      // Account selection is optional - backend will use default account if none provided
+
       const payload = {
         quotation_id: Number(id),
+        work_order_date: workOrderDate,
         appointment_date: appt,
         estimated_completion_days: Number(days),
         booking_amount: tokenAmt ? Number(tokenAmt) : undefined,
+        account_id: selectedAccount ? Number(selectedAccount) : undefined,
       };
-      const bill = await workOrdersApi.create(payload);
-      toast({ title: 'Work Order created', description: bill.bill_number });
+      const workOrder = await workOrdersApi.create(payload);
+
+      // Note: Finance transaction is automatically created by the backend
+      // when a work order is created with a booking amount
+
+      toast({ title: 'Work Order created', description: workOrder.work_order_number });
       setOpenConvert(false);
       setManufacturingLoad(null); // Clear load data
-      navigate(`/work-orders/${bill.id}`);
+      setSelectedAccount('');
+      setTransactionImage(null);
+      setImagePreview(null);
+      navigate(`/work-orders/${workOrder.id}`);
     } catch (e) {
       let msg = e instanceof Error ? e.message : 'Unknown error';
       // Try to extract suggestionDate from JSON response
@@ -216,7 +267,7 @@ export default function QuotationDetails() {
           msg = `Slot full. Suggested: ${data.suggestionDate}`;
           setAppt(data.suggestionDate);
         }
-      } catch {}
+      } catch { }
       toast({ title: 'Failed to create work order', description: msg, variant: 'destructive' });
     }
   }
@@ -228,9 +279,9 @@ export default function QuotationDetails() {
   }
 
   function previewFinal(): number {
-  // With inline discount input removed, preview is just current discounted total
-  if (discountTotals?.discounted_total != null) return discountTotals.discounted_total;
-  return baseTotal();
+    // With inline discount input removed, preview is just current discounted total
+    if (discountTotals?.discounted_total != null) return discountTotals.discounted_total;
+    return baseTotal();
   }
 
   async function handleSubmitForReview() {
@@ -249,7 +300,7 @@ export default function QuotationDetails() {
   async function handleApproveWithFinal() {
     try {
       if (!id) return;
-  const final_total = discountTotals?.discounted_total ?? baseTotal();
+      const final_total = discountTotals?.discounted_total ?? baseTotal();
       await api.post(`/quotations/${id}/approve/`, { final_total });
       toast({ title: 'Approved', description: `Final total ₹${final_total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` });
       const fresh = await api.get<QuotationDetail>(`/quotations/${id}/`);
@@ -287,7 +338,7 @@ export default function QuotationDetails() {
       return;
     }
     try {
-      const ver = await api.post<{id:number}>(`/quotations/${id}/versions/`, { mode: discMode, value: v, note: discNote || undefined });
+      const ver = await api.post<{ id: number }>(`/quotations/${id}/versions/`, { mode: discMode, value: v, note: discNote || undefined });
       toast({ title: 'Version created' });
       // refresh version list
       const list = await api.get<typeof versions>(`/quotations/${id}/versions/`);
@@ -301,10 +352,10 @@ export default function QuotationDetails() {
   async function handlePrintVersion(vid: number) {
     if (!id) return;
     try {
-      const API_ROOT = (import.meta.env.VITE_API_ROOT as string) || "http://127.0.0.1:8000";
+      const base = API_ROOT;
       const tokensRaw = localStorage.getItem("nk:tokens");
       const access = tokensRaw ? (JSON.parse(tokensRaw).access as string) : "";
-      const res = await fetch(`${API_ROOT}/api/manufacturing/quotations/${id}/print/?version_id=${vid}`, {
+      const res = await fetch(`${base}/api/manufacturing/quotations/${id}/print/?version_id=${vid}`, {
         headers: access ? { Authorization: `Bearer ${access}` } : undefined,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -329,10 +380,10 @@ export default function QuotationDetails() {
   async function handlePrint() {
     if (!id) return;
     try {
-      const API_ROOT = (import.meta.env.VITE_API_ROOT as string) || "http://127.0.0.1:8000";
+      const base = API_ROOT;
       const tokensRaw = localStorage.getItem("nk:tokens");
       const access = tokensRaw ? (JSON.parse(tokensRaw).access as string) : "";
-      const res = await fetch(`${API_ROOT}/api/manufacturing/quotations/${id}/print/`, {
+      const res = await fetch(`${base}/api/manufacturing/quotations/${id}/print/`, {
         headers: access ? { Authorization: `Bearer ${access}` } : undefined,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -360,21 +411,21 @@ export default function QuotationDetails() {
     if (!id) return;
     const q = parseInt(featQty || '0');
     const unit = parseFloat(featUnitPrice || '0');
-  if (!useCustom && !selectedChildCategoryId) { toast({title:'Select category', variant:'destructive'}); return; }
-    if (useCustom && !featName.trim()) { toast({title:'Name required', variant:'destructive'}); return; }
-    if (q <= 0) { toast({title:'Quantity must be > 0', variant:'destructive'}); return; }
-    if (unit < 0) { toast({title:'Unit price must be >= 0', variant:'destructive'}); return; }
+    if (!useCustom && !selectedChildCategoryId) { toast({ title: 'Select category', variant: 'destructive' }); return; }
+    if (useCustom && !featName.trim()) { toast({ title: 'Name required', variant: 'destructive' }); return; }
+    if (q <= 0) { toast({ title: 'Quantity must be > 0', variant: 'destructive' }); return; }
+    if (unit < 0) { toast({ title: 'Unit price must be >= 0', variant: 'destructive' }); return; }
     try {
-  await quotationApi.addFeature(Number(id), { name: useCustom ? featName.trim() : undefined, feature_type_id: !useCustom ? (selectedFeatureType ?? undefined) : undefined, feature_category_id: !useCustom ? selectedChildCategoryId ?? undefined : undefined, quantity: q, unit_price: unit || undefined });
+      await quotationApi.addFeature(Number(id), { name: useCustom ? featName.trim() : undefined, feature_type_id: !useCustom ? (selectedFeatureType ?? undefined) : undefined, feature_category_id: !useCustom ? selectedChildCategoryId ?? undefined : undefined, quantity: q, unit_price: unit || undefined });
       toast({ title: 'Feature added' });
-  setAddFeatureOpen(false); setFeatName(''); setFeatQty('1'); setFeatUnitPrice(''); setSelectedFeatureType(null); setUseCustom(false); setFeatSearch(''); setSelectedParentCategoryId(null); setSelectedChildCategoryId(null);
+      setAddFeatureOpen(false); setFeatName(''); setFeatQty('1'); setFeatUnitPrice(''); setSelectedFeatureType(null); setUseCustom(false); setFeatSearch(''); setSelectedParentCategoryId(null); setSelectedChildCategoryId(null);
       // Refresh quotation + discounts + versions
       const fresh = await api.get<QuotationDetail>(`/quotations/${id}/`); setQuote(fresh);
       const d = await quotationApi.listDiscounts(Number(id)); setDiscounts(d.items); setDiscountTotals({ base_total: d.base_total, total_discount: d.total_discount, discounted_total: d.discounted_total });
       const vers = await api.get<typeof versions>(`/quotations/${id}/versions/`); setVersions(vers);
-    } catch(e) {
+    } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
-      toast({ title:'Failed to add feature', description: msg, variant:'destructive'});
+      toast({ title: 'Failed to add feature', description: msg, variant: 'destructive' });
     }
   }
 
@@ -398,12 +449,12 @@ export default function QuotationDetails() {
         </div>
         <div className="flex items-center gap-2 text-xs">
           <Badge variant={quote.status === 'approved' ? 'default' : 'secondary'} className="uppercase tracking-wide">{quote.status}</Badge>
-          <span className="text-muted-foreground">Created:</span>
-          <span>{new Date(quote.created_at).toLocaleDateString()}</span>
+          <span className="text-muted-foreground">Quotation Date:</span>
+          <span>{new Date(quote.quotation_date).toLocaleDateString()}</span>
           <Button size="sm" variant="outline" onClick={handlePrint} className="ml-2 gap-1">
             <Printer className="h-3.5 w-3.5" /> Print
           </Button>
-          
+
           {/* Action buttons based on status */}
           {quote.status === 'draft' && (
             <Button size="sm" variant="outline" className="ml-2" onClick={() => {
@@ -426,11 +477,11 @@ export default function QuotationDetails() {
               Submit for Review
             </Button>
           )}
-          
+
           {quote.status === 'review' && (
             <Button size="sm" variant="outline" className="ml-2" onClick={() => {
               // Approve quotation logic - no final total required
-              api.post(`/quotations/${quote.id}/approve/`, { 
+              api.post(`/quotations/${quote.id}/approve/`, {
                 final_total: quote.suggested_total // Use suggested total as final total
               })
                 .then(() => {
@@ -450,13 +501,16 @@ export default function QuotationDetails() {
               Approve Quotation
             </Button>
           )}
-          
+
           {quote.status === 'approved' && (
             <Dialog open={openConvert} onOpenChange={(open) => {
               setOpenConvert(open);
               if (!open) {
                 // Clear manufacturing load when dialog closes to get fresh data next time
                 setManufacturingLoad(null);
+                setSelectedAccount('');
+                setTransactionImage(null);
+                setImagePreview(null);
               }
             }}>
               <DialogTrigger asChild>
@@ -466,7 +520,7 @@ export default function QuotationDetails() {
                 <DialogHeader>
                   <DialogTitle>Convert to Work Order</DialogTitle>
                 </DialogHeader>
-                
+
                 {/* Manufacturing Load Summary */}
                 {loadLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -479,7 +533,7 @@ export default function QuotationDetails() {
                       <TrendingUp className="h-4 w-4" />
                       Current Manufacturing Load
                     </div>
-                    
+
                     <div className="grid grid-cols-3 gap-3 text-sm">
                       <div className="text-center p-2 bg-background rounded border">
                         <div className="font-semibold text-lg">{manufacturingLoad.total_active_jobs}</div>
@@ -521,7 +575,7 @@ export default function QuotationDetails() {
                               <div className="font-medium">{duration.replace('_', ' ').toUpperCase()}</div>
                               {slot.start_date ? (
                                 <div className="text-muted-foreground">
-                                  {new Date(slot.start_date).toLocaleDateString()} 
+                                  {new Date(slot.start_date).toLocaleDateString()}
                                   {slot.days_from_now !== null && ` (+${slot.days_from_now}d)`}
                                 </div>
                               ) : (
@@ -552,36 +606,160 @@ export default function QuotationDetails() {
                     <Input id="days" type="number" min={1} value={days} onChange={(e) => setDays(Number(e.target.value))} />
                     {manufacturingLoad?.next_available_slots?.[`${days}_day`] && (
                       <div className="text-xs text-muted-foreground">
-                        Next {days}-day slot: {manufacturingLoad.next_available_slots[`${days}_day`].start_date 
+                        Next {days}-day slot: {manufacturingLoad.next_available_slots[`${days}_day`].start_date
                           ? new Date(manufacturingLoad.next_available_slots[`${days}_day`].start_date!).toLocaleDateString()
                           : 'Not available in next 30 days'}
                       </div>
                     )}
                   </div>
                   <div className="grid gap-1">
-                    <Label htmlFor="appt">Appointment date {suggestLoading && <span className="text-xs text-muted-foreground">(suggesting…)</span>}</Label>
-                    <Input id="appt" type="date" value={appt} onChange={(e) => setAppt(e.target.value)} />
+                    <Label htmlFor="workOrderDate">Work Order Date</Label>
+                    <WorkOrderDatePicker
+                      date={workOrderDate ? new Date(workOrderDate + 'T00:00:00') : undefined}
+                      onDateChange={(date) => {
+                        if (date) {
+                          const year = date.getFullYear();
+                          const month = String(date.getMonth() + 1).padStart(2, '0');
+                          const day = String(date.getDate()).padStart(2, '0');
+                          setWorkOrderDate(`${year}-${month}-${day}`);
+                        } else {
+                          setWorkOrderDate('');
+                        }
+                      }}
+                      placeholder="Select work order date"
+                      quotationDate={quote?.quotation_date}
+                      workOrderDate={workOrderDate}
+                      appointmentDate={appt}
+                      deliveryDate={undefined} // No delivery date in quotation
+                    />
                   </div>
                   <div className="grid gap-1">
-                    <Label htmlFor="token">Token amount (optional)</Label>
-                    <Input id="token" type="number" min={0} value={tokenAmt} onChange={(e) => setTokenAmt(e.target.value)} />
+                    <Label htmlFor="appt">Appointment date {suggestLoading && <span className="text-xs text-muted-foreground">(suggesting…)</span>}</Label>
+                    <WorkOrderDatePicker
+                      date={appt ? new Date(appt + 'T00:00:00') : undefined}
+                      onDateChange={(date) => {
+                        if (date) {
+                          const year = date.getFullYear();
+                          const month = String(date.getMonth() + 1).padStart(2, '0');
+                          const day = String(date.getDate()).padStart(2, '0');
+                          setAppt(`${year}-${month}-${day}`);
+                        } else {
+                          setAppt('');
+                        }
+                      }}
+                      placeholder="Select appointment date"
+                      quotationDate={quote?.quotation_date}
+                      workOrderDate={workOrderDate}
+                      appointmentDate={appt}
+                      deliveryDate={undefined} // No delivery date in quotation
+                    />
+                  </div>
+
+                  {/* Finance Integration Section */}
+                  <div className="border-t pt-4">
+                    <h4 className="text-sm font-medium mb-3">Finance Integration</h4>
+
+                    <div className="grid gap-3">
+                      <div className="grid gap-1">
+                        <Label htmlFor="account">Select Account (Optional)</Label>
+                        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select finance account (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {accounts.map((account) => (
+                              <SelectItem key={account.id} value={account.id.toString()}>
+                                {account.nickname} ({account.account_type})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          If not selected, system will use default account
+                        </p>
+                      </div>
+
+                      <div className="grid gap-1">
+                        <Label htmlFor="token">Booking Amount (Token) *</Label>
+                        <Input
+                          id="token"
+                          type="number"
+                          min={0}
+                          value={tokenAmt}
+                          onChange={(e) => setTokenAmt(e.target.value)}
+                          placeholder="Enter booking amount"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          This will create a Credit transaction with customer as From Party
+                        </p>
+                      </div>
+
+                      <div className="grid gap-1">
+                        <Label htmlFor="transaction_image">Transaction Image (Optional)</Label>
+                        <div className="space-y-2">
+                          <input
+                            id="transaction_image"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageSelect}
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                          />
+                          {imagePreview && (
+                            <div className="relative inline-block">
+                              <img
+                                src={imagePreview}
+                                alt="Preview"
+                                className="h-24 w-24 object-cover rounded border"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleRemoveImage}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs hover:bg-red-600"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                      <div className="text-xs text-blue-800">
+                        <strong>Automatic Finance Transaction:</strong>
+                        <ul className="mt-1 space-y-1">
+                          <li>• Transaction Type: Credit</li>
+                          <li>• From Party: {quote?.customer?.name || 'Customer'}</li>
+                          <li>• To Party: Nathkrupa Body Builder</li>
+                          <li>• Bill Number: Work Order Number</li>
+                          <li>• Purpose: Booking amount for work order - Quote {quote?.quotation_number}</li>
+                          <li>• Account: {selectedAccount ? accounts.find(a => a.id.toString() === selectedAccount)?.nickname : 'Default Account'}</li>
+                        </ul>
+                        <p className="mt-2 text-blue-700">
+                          <strong>Note:</strong> Finance transaction will be created automatically when work order is created.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => {
                     setOpenConvert(false);
                     setManufacturingLoad(null);
+                    setSelectedAccount('');
+                    setTransactionImage(null);
+                    setImagePreview(null);
                   }}>Cancel</Button>
                   <Button onClick={handleConvert}>Create Work Order</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
           )}
-          
+
           {quote.status === 'rejected' && (
             <span className="ml-2 text-sm text-red-600">This quotation has been rejected</span>
           )}
-          
+
           {quote.status === 'converted' && (
             <span className="ml-2 text-sm text-green-600">Converted to work order</span>
           )}
@@ -701,7 +879,7 @@ export default function QuotationDetails() {
                 <div className="grid gap-4 py-2">
                   <div className="grid gap-1">
                     <Label>Mode</Label>
-                    <Tabs value={discMode} onValueChange={(v)=>setDiscMode(v as 'amount'|'percent')}>
+                    <Tabs value={discMode} onValueChange={(v) => setDiscMode(v as 'amount' | 'percent')}>
                       <TabsList>
                         <TabsTrigger value="amount">Amount</TabsTrigger>
                         <TabsTrigger value="percent">Percent</TabsTrigger>
@@ -710,15 +888,15 @@ export default function QuotationDetails() {
                   </div>
                   <div className="grid gap-1">
                     <Label>{discMode === 'amount' ? 'Amount (₹)' : 'Percent (%)'}</Label>
-                    <Input type="number" min={0} max={discMode==='percent'?100:undefined} value={discValue} onChange={e=>setDiscValue(e.target.value)} placeholder={discMode==='amount'?'5000':'10'} />
+                    <Input type="number" min={0} max={discMode === 'percent' ? 100 : undefined} value={discValue} onChange={e => setDiscValue(e.target.value)} placeholder={discMode === 'amount' ? '5000' : '10'} />
                   </div>
                   <div className="grid gap-1">
                     <Label>Note (optional)</Label>
-                    <Input value={discNote} onChange={e=>setDiscNote(e.target.value)} placeholder="Reason / context" />
+                    <Input value={discNote} onChange={e => setDiscNote(e.target.value)} placeholder="Reason / context" />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={()=>setOpenAddDiscount(false)}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setOpenAddDiscount(false)}>Cancel</Button>
                   <Button onClick={handleAddDiscount}>Add</Button>
                   <Button variant="secondary" onClick={handleCreateVersionFromInput}>Save as Version</Button>
                 </DialogFooter>
@@ -741,29 +919,29 @@ export default function QuotationDetails() {
                 <div className="grid gap-3 py-2">
                   <div className="grid gap-1">
                     <Label>New final total</Label>
-                    <Input type="number" min={0} value={overrideValue} onChange={e=>setOverrideValue(e.target.value)} placeholder="e.g. 588.06" />
-                    <p className="text-xs text-muted-foreground">Current discounted: ₹{(discountTotals?.discounted_total ?? baseTotal()).toLocaleString('en-IN',{maximumFractionDigits:2})}</p>
+                    <Input type="number" min={0} value={overrideValue} onChange={e => setOverrideValue(e.target.value)} placeholder="e.g. 588.06" />
+                    <p className="text-xs text-muted-foreground">Current discounted: ₹{(discountTotals?.discounted_total ?? baseTotal()).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</p>
                   </div>
                   <div className="grid gap-1">
                     <Label>Note (optional)</Label>
-                    <Input value={overrideNote} onChange={e=>setOverrideNote(e.target.value)} placeholder="Reason / reference" />
+                    <Input value={overrideNote} onChange={e => setOverrideNote(e.target.value)} placeholder="Reason / reference" />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={()=>setOverrideOpen(false)}>Cancel</Button>
-                  <Button onClick={async ()=>{
-                    if(!id) return;
-                    const v = parseFloat(overrideValue||'0');
-                    if(!v || v<0){ toast({title:'Enter valid final total', variant:'destructive'}); return; }
+                  <Button variant="outline" onClick={() => setOverrideOpen(false)}>Cancel</Button>
+                  <Button onClick={async () => {
+                    if (!id) return;
+                    const v = parseFloat(overrideValue || '0');
+                    if (!v || v < 0) { toast({ title: 'Enter valid final total', variant: 'destructive' }); return; }
                     try {
-                      await api.post(`/quotations/${id}/manual_override/`, { final_total: v, note: overrideNote||undefined });
-                      toast({ title:'Final total overridden', description:`New final ₹${v.toLocaleString('en-IN',{maximumFractionDigits:2})}` });
+                      await api.post(`/quotations/${id}/manual_override/`, { final_total: v, note: overrideNote || undefined });
+                      toast({ title: 'Final total overridden', description: `New final ₹${v.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` });
                       setOverrideOpen(false); setOverrideNote(''); setOverrideValue('');
                       const fresh = await api.get<QuotationDetail>(`/quotations/${id}/`); setQuote(fresh);
                       const list = await api.get<typeof versions>(`/quotations/${id}/versions/`); setVersions(list);
-                    } catch(e){
+                    } catch (e) {
                       const msg = e instanceof Error ? e.message : 'Unknown error';
-                      toast({ title:'Override failed', description:msg, variant:'destructive'});
+                      toast({ title: 'Override failed', description: msg, variant: 'destructive' });
                     }
                   }}>Save</Button>
                 </DialogFooter>
@@ -865,10 +1043,10 @@ export default function QuotationDetails() {
                 <div className="grid gap-3 py-2">
                   <div className="flex items-center gap-3 text-xs">
                     <label className="flex items-center gap-1">
-                      <input type="radio" className="h-3 w-3" checked={!useCustom} onChange={()=>setUseCustom(false)} /> Existing
+                      <input type="radio" className="h-3 w-3" checked={!useCustom} onChange={() => setUseCustom(false)} /> Existing
                     </label>
                     <label className="flex items-center gap-1">
-                      <input type="radio" className="h-3 w-3" checked={useCustom} onChange={()=>setUseCustom(true)} /> Custom
+                      <input type="radio" className="h-3 w-3" checked={useCustom} onChange={() => setUseCustom(true)} /> Custom
                     </label>
                   </div>
                   {!useCustom && (
@@ -876,25 +1054,25 @@ export default function QuotationDetails() {
                       {/* Parent Category */}
                       <div className="grid gap-1">
                         <Label>Parent Category</Label>
-                        <select aria-label="Parent Category" className="border rounded px-2 py-1 text-sm" value={selectedParentCategoryId??''} onChange={e=>{const v=e.target.value?Number(e.target.value):null; setSelectedParentCategoryId(v);}}>
+                        <select aria-label="Parent Category" className="border rounded px-2 py-1 text-sm" value={selectedParentCategoryId ?? ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setSelectedParentCategoryId(v); }}>
                           <option value="">-- Select Parent --</option>
-                          {parentCategories.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}
+                          {parentCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                       </div>
                       {/* Child Category (always shown) */}
                       <div className="grid gap-1">
                         <Label>Category</Label>
-                        <select aria-label="Child Category" className="border rounded px-2 py-1 text-sm" disabled={!selectedParentCategoryId} value={selectedChildCategoryId??''} onChange={e=>{const v=e.target.value?Number(e.target.value):null; setSelectedChildCategoryId(v); setSelectedFeatureType(null);}}>
-                          <option value="">{selectedParentCategoryId? '-- Select Category --' : 'Select parent first'}</option>
-                          {childCategories.map(c=> <option key={c.id} value={c.id}>{c.name}</option>)}
+                        <select aria-label="Child Category" className="border rounded px-2 py-1 text-sm" disabled={!selectedParentCategoryId} value={selectedChildCategoryId ?? ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setSelectedChildCategoryId(v); setSelectedFeatureType(null); }}>
+                          <option value="">{selectedParentCategoryId ? '-- Select Category --' : 'Select parent first'}</option>
+                          {childCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                       </div>
                       {/* Feature Type (always shown) */}
                       <div className="grid gap-1">
                         <Label>Feature Type (optional)</Label>
-                        <select aria-label="Feature Type" className="border rounded px-2 py-1 text-sm" disabled={!selectedChildCategoryId || featureTypes.length===0} value={selectedFeatureType??''} onChange={e=>{const v=e.target.value?Number(e.target.value):null; setSelectedFeatureType(v);}}>
-                          <option value="">{selectedChildCategoryId? (featureTypes.length? '-- Select Feature Type --' : 'No types available') : 'Select category first'}</option>
-                          {featureTypes.map(ft=> <option key={ft.id} value={ft.id}>{ft.name}</option>)}
+                        <select aria-label="Feature Type" className="border rounded px-2 py-1 text-sm" disabled={!selectedChildCategoryId || featureTypes.length === 0} value={selectedFeatureType ?? ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setSelectedFeatureType(v); }}>
+                          <option value="">{selectedChildCategoryId ? (featureTypes.length ? '-- Select Feature Type --' : 'No types available') : 'Select category first'}</option>
+                          {featureTypes.map(ft => <option key={ft.id} value={ft.id}>{ft.name}</option>)}
                         </select>
                         <p className="text-[10px] text-muted-foreground">Leave blank to add category-level line.</p>
                       </div>
@@ -903,22 +1081,22 @@ export default function QuotationDetails() {
                   {useCustom && (
                     <div className="grid gap-1">
                       <Label>Name</Label>
-                      <Input value={featName} onChange={e=>setFeatName(e.target.value)} placeholder="e.g. Ladder" />
+                      <Input value={featName} onChange={e => setFeatName(e.target.value)} placeholder="e.g. Ladder" />
                     </div>
                   )}
                   <div className="grid gap-1">
                     <Label>Quantity</Label>
-                    <Input type="number" min={1} value={featQty} onChange={e=>setFeatQty(e.target.value)} />
+                    <Input type="number" min={1} value={featQty} onChange={e => setFeatQty(e.target.value)} />
                   </div>
                   <div className="grid gap-1">
-                    <Label>Unit Price (₹){autoUnitPrice!=null && <span className="ml-2 text-xs text-muted-foreground">Suggested: ₹{autoUnitPrice.toLocaleString('en-IN',{maximumFractionDigits:2})}</span>}</Label>
-                    <Input type="number" min={0} value={featUnitPrice} onChange={e=>setFeatUnitPrice(e.target.value)} placeholder={autoUnitPrice!=null?String(autoUnitPrice):'e.g. 2500'} />
+                    <Label>Unit Price (₹){autoUnitPrice != null && <span className="ml-2 text-xs text-muted-foreground">Suggested: ₹{autoUnitPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>}</Label>
+                    <Input type="number" min={0} value={featUnitPrice} onChange={e => setFeatUnitPrice(e.target.value)} placeholder={autoUnitPrice != null ? String(autoUnitPrice) : 'e.g. 2500'} />
                     <p className="text-[10px] text-muted-foreground">Auto-filled from price list if available; you can override.</p>
                   </div>
                   <p className="text-xs text-muted-foreground">Discounts will automatically re-apply on the new base and a new version will be created.</p>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={()=>setAddFeatureOpen(false)}>Cancel</Button>
+                  <Button variant="outline" onClick={() => setAddFeatureOpen(false)}>Cancel</Button>
                   <Button onClick={handleAddFeature}>Add Feature</Button>
                 </DialogFooter>
               </DialogContent>
@@ -929,16 +1107,44 @@ export default function QuotationDetails() {
           {quote.features && quote.features.length > 0 ? (
             <div className="space-y-2 text-sm">
               {quote.features.map(f => {
-                const catName = (f as any).feature_category?.name;
-                const name = f.feature_type?.name || (f.custom_name?.trim() ? f.custom_name.trim() : (catName || 'Item'));
+                // Use display_name from API if available, otherwise construct it
+                const displayName = (f as any).display_name || (() => {
+                  // Priority 1: Custom name
+                  if (f.custom_name?.trim()) return f.custom_name.trim();
+
+                  // Priority 2: Feature type name (for typed features like "Bumper T1")
+                  if (f.feature_type) {
+                    if (f.feature_type.category?.name) {
+                      return `${f.feature_type.category.name} - ${f.feature_type.name}`;
+                    }
+                    return f.feature_type.name;
+                  }
+
+                  // Priority 3: Feature category name (for non-typed features like "Rear Bumper")
+                  if ((f as any).feature_category?.name) {
+                    return (f as any).feature_category.name;
+                  }
+
+                  // Priority 4: Try alternative property names that might exist
+                  if ((f as any).category?.name) {
+                    return (f as any).category.name;
+                  }
+
+                  // Final fallback - this should rarely be reached now that backend serializer includes feature_category
+                  return 'Feature';
+                })();
+
                 const isCustom = !!f.custom_name && !f.feature_type;
-                const categoryName = f.feature_type?.category?.name || ( (f as any).feature_category?.name );
+
+                // For category display under the name - only show if it's a feature type (to avoid duplication)
+                const categoryDisplay = f.feature_type?.category?.name || null;
+
                 return (
                   <div key={f.id} className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium">{name}{isCustom && ' (custom)'}</div>
-                      {categoryName && (
-                        <div className="text-xs text-muted-foreground">{categoryName}</div>
+                      <div className="font-medium">{displayName}{isCustom && ' (custom)'}</div>
+                      {categoryDisplay && !displayName.includes(categoryDisplay) && (
+                        <div className="text-xs text-muted-foreground">{categoryDisplay}</div>
                       )}
                     </div>
                     <div className="text-sm">x{f.quantity} • ₹{(typeof f.unit_price === 'string' ? parseFloat(f.unit_price) : f.unit_price).toLocaleString()} = <span className="font-semibold">₹{(typeof f.total_price === 'string' ? parseFloat(f.total_price) : f.total_price).toLocaleString()}</span></div>

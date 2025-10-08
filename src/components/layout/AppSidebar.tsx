@@ -1,20 +1,20 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import { Home, Users, FileSpreadsheet, BarChart3, Settings, Moon, Sun, LogOut, Layers, IndianRupee, Tags, Car, Factory, User as UserIcon, Laptop, Clock, Play, CheckCircle, X, ChevronDown, ChevronRight } from "lucide-react";
-import { CreditCard } from "lucide-react";
+import { Home, Users, FileSpreadsheet, BarChart3, Settings, Moon, Sun, LogOut, Layers, IndianRupee, Tags, Car, Factory, User as UserIcon, Laptop, Clock, Play, CheckCircle, X, ChevronDown, ChevronRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeMode, useTheme } from "@/hooks/useTheme";
-import { authApi, getTokens, workOrdersApi } from "@/lib/api";
+import { getTokens, workOrdersApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 
-type NavItem = { 
-  title: string; 
-  url: string; 
-  icon: React.ComponentType<{ className?: string }>; 
-  subItems?: NavItem[]; 
+type NavItem = {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  subItems?: NavItem[];
   count?: number;
 };
 
@@ -38,12 +38,13 @@ const group4: NavItem[] = [
 export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
   const { setTheme, theme, isDark } = useTheme();
   const [themeOpen, setThemeOpen] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(["Work Orders"]));
   const themeBtnRef = useRef<HTMLButtonElement | null>(null);
   const popRef = useRef<HTMLDivElement | null>(null);
-  
+
   // Auto-expand Work Orders if we're on a work order page
   useEffect(() => {
     if (location.pathname.includes('/work-orders')) {
@@ -58,7 +59,7 @@ export function AppSidebar() {
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
-  const workOrders = workOrdersData ? 
+  const workOrders = workOrdersData ?
     (Array.isArray(workOrdersData) ? workOrdersData : (workOrdersData.results ?? [])) : [];
 
   const workOrderCounts = {
@@ -72,9 +73,9 @@ export function AppSidebar() {
   const group1: NavItem[] = [
     { title: "Dashboard", url: "/dashboard", icon: Home },
     { title: "Quotations", url: "/quotations", icon: FileSpreadsheet },
-    { 
-      title: "Work Orders", 
-      url: "/work-orders", 
+    {
+      title: "Work Orders",
+      url: "/work-orders",
       icon: Layers,
       subItems: [
         { title: "All Orders", url: "/work-orders", icon: Layers, count: workOrderCounts.total },
@@ -84,11 +85,11 @@ export function AppSidebar() {
         { title: "Cancelled Orders", url: "/work-orders?status=cancelled", icon: X, count: workOrderCounts.cancelled },
       ]
     },
-    { title: "Payments", url: "/payments", icon: CreditCard },
+    { title: "Bills", url: "/bills", icon: FileText },
     { title: "Customers", url: "/dashboard/customers", icon: Users },
     { title: "Feature Prices", url: "/features/prices", icon: IndianRupee },
   ];
-  
+
   // Inject minimal CSS for popover positioning once
   useEffect(() => {
     const id = "nk-theme-popover-style";
@@ -108,12 +109,12 @@ export function AppSidebar() {
     // Position below the button (like 90% zoom) instead of to the right
     let left = rect.left;
     let top = rect.bottom + gap;
-    
+
     // Ensure popup stays within viewport
     if (left + estimatedWidth > window.innerWidth - 8) {
       left = Math.max(8, window.innerWidth - estimatedWidth - 8);
     }
-    
+
     document.documentElement.style.setProperty("--nk-theme-popover-top", `${top}px`);
     document.documentElement.style.setProperty("--nk-theme-popover-left", `${left}px`);
   };
@@ -165,13 +166,13 @@ export function AppSidebar() {
       {items.map((item) => {
         const isExpanded = expandedMenus.has(item.title);
         const hasSubItems = item.subItems && item.subItems.length > 0;
-        
+
         return (
           <div key={item.title}>
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
                 {hasSubItems ? (
-                  <button 
+                  <button
                     onClick={() => toggleMenu(item.title)}
                     className={`w-full flex items-center justify-between ${getNavCls({ isActive: location.pathname === item.url && !location.search })}`}
                   >
@@ -193,20 +194,20 @@ export function AppSidebar() {
                 )}
               </SidebarMenuButton>
             </SidebarMenuItem>
-            
+
             {/* Render sub-items if expanded */}
             {hasSubItems && isExpanded && (
               <div className="ml-6 mt-1 space-y-0.5">
                 {item.subItems!.map((subItem) => {
-                  const isSubActive = location.pathname === '/work-orders' && 
+                  const isSubActive = location.pathname === '/work-orders' &&
                     ((subItem.url === '/work-orders' && !location.search) ||
-                     (location.search && location.search.includes(subItem.url.split('status=')[1])));
-                  
+                      (location.search && location.search.includes(subItem.url.split('status=')[1])));
+
                   return (
                     <SidebarMenuItem key={subItem.title}>
                       <SidebarMenuButton asChild>
-                        <NavLink 
-                          to={subItem.url} 
+                        <NavLink
+                          to={subItem.url}
                           className={cn(
                             "h-8 text-[12px] pl-2 flex items-center",
                             isSubActive
@@ -237,7 +238,7 @@ export function AppSidebar() {
   const themeLabel = theme === "dark" ? "Dark Mode" : theme === "system" ? "System" : "Light Mode";
 
   return (
-  <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col">
       <div className="flex-1 min-h-0 px-2 py-2 space-y-3 overflow-y-auto pr-1">
         {/* Group 1 */}
         <div>{renderGroup(group1)}</div>
@@ -256,8 +257,8 @@ export function AppSidebar() {
       </div>
 
       {/* Bottom panel: User, Theme (with popover), Logout */}
-  <div className="p-3 border-t border-sidebar-border space-y-2 shrink-0">
-  {/* User section (no heading) */}
+      <div className="p-3 border-t border-sidebar-border space-y-2 shrink-0">
+        {/* User section (no heading) */}
         <button className="w-full flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar px-3 py-2 text-left text-sm hover:bg-sidebar-accent/50" disabled>
           <UserIcon className="w-4 h-4" />
           <span>User</span>
@@ -314,7 +315,7 @@ export function AppSidebar() {
 
         <div className="border-t border-sidebar-border" />
         <button
-          onClick={() => { if (getTokens()) { authApi.logout(); navigate('/login', { replace: true }); } }}
+          onClick={logout}
           className="w-full flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-sidebar-accent/50"
         >
           <LogOut className="w-4 h-4" />

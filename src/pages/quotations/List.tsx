@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, FileText, Users, TrendingUp, DollarSign, Printer } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, API_ROOT } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { useOrganization } from "@/hooks/useOrganization";
 
 type QuoteRow = {
   id: number;
@@ -12,6 +13,7 @@ type QuoteRow = {
   suggested_total: number | string;
   final_total?: number | string | null;
   created_at: string;
+  quotation_date: string;
   status: string;
   customer?: { name: string; phone_number?: string } | null;
   vehicle_maker?: { name: string } | null;
@@ -21,6 +23,7 @@ type QuoteRow = {
 };
 
 export default function QuotationsList() {
+  const { organizationName } = useOrganization();
   const [quotations, setQuotations] = useState<QuoteRow[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -28,11 +31,12 @@ export default function QuotationsList() {
   const [dateTo, setDateTo] = useState<string>("");
 
   useEffect(() => {
-    document.title = "Quotations | Nathkrupa ERP";
+    document.title = `Quotations | ${organizationName}`;
+    // Using centralized API_ROOT
     api.get<QuoteRow[]>("/quotations/")
       .then(setQuotations)
       .catch(() => toast({ title: 'Failed to load quotations', variant: 'destructive' }));
-  }, []);
+  }, [organizationName]);
 
   const totalQuotes = quotations.length;
   const totalValue = quotations.reduce((sum, q) => {
@@ -51,7 +55,7 @@ export default function QuotationsList() {
 
   async function handlePrint(id: number) {
     try {
-      const API_ROOT = (import.meta.env.VITE_API_ROOT as string) || "http://127.0.0.1:8000";
+      // Using centralized API_ROOT
       const tokensRaw = localStorage.getItem("nk:tokens");
       const access = tokensRaw ? (JSON.parse(tokensRaw).access as string) : "";
       const res = await fetch(`${API_ROOT}/api/manufacturing/quotations/${id}/print/`, {
@@ -102,9 +106,9 @@ export default function QuotationsList() {
     const matchesStatus = !statusFilter || q.status === statusFilter;
 
     // Date range filter
-    const created = new Date(q.created_at);
-    const fromOk = !dateFrom || created >= new Date(dateFrom);
-    const toOk = !dateTo || created <= new Date(dateTo);
+    const quotationDate = new Date(q.quotation_date);
+    const fromOk = !dateFrom || quotationDate >= new Date(dateFrom);
+    const toOk = !dateTo || quotationDate <= new Date(dateTo);
 
     return matchesText && matchesStatus && fromOk && toOk;
   });
@@ -275,7 +279,7 @@ export default function QuotationsList() {
                       )}
                     </td>
                     <td className="p-3">
-                      <span className="text-sm">{new Date(quote.created_at).toLocaleDateString()}</span>
+                      <span className="text-sm">{new Date(quote.quotation_date).toLocaleDateString()}</span>
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">

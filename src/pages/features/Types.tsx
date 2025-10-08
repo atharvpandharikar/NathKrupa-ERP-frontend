@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
-
+import { useOrganization } from "@/hooks/useOrganization";
 interface VehicleMaker { id: number; name: string }
 
 interface VehicleModel { id: number; name: string; }
@@ -15,6 +15,7 @@ interface FeatureCategory { id: number; name: string; }
 interface FeatureType { id: number; name: string; category: FeatureCategory; vehicle_models: VehicleModel[] }
 
 export default function FeatureTypesPage() {
+  const { organizationName } = useOrganization();
   const [items, setItems] = useState<FeatureType[]>([]);
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<FeatureCategory[]>([]);
@@ -28,7 +29,7 @@ export default function FeatureTypesPage() {
   const [vmQuery, setVmQuery] = useState("");
 
   useEffect(() => {
-    document.title = "Feature Types | Nathkrupa ERP";
+    document.title = `Feature Types  | ${organizationName}`;
     Promise.all([
       api.get<FeatureType[]>("/feature-types/"),
       api.get<FeatureCategory[]>("/feature-categories/"),
@@ -36,7 +37,7 @@ export default function FeatureTypesPage() {
     ])
   .then(([fts, cats, vms]) => { setItems(fts); setCategories(cats); setModels(vms); })
   .catch(() => toast({ title: "Failed to load data", description: "Please refresh the page or try again later.", variant: "destructive" }));
-  }, []);
+  }, [organizationName]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();

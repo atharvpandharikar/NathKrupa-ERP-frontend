@@ -3,7 +3,7 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm ci --omit=optional
+        - npm ci
     build:
       commands:
         - npm run build
@@ -17,17 +17,29 @@ frontend:
   customHeaders:
     - pattern: '**/*.js'
       headers:
-        - key: 'Cache-Control'
-          value: 'public, max-age=31536000, immutable'
+        - key: Cache-Control
+          value: public,max-age=31536000,immutable
+        - key: Content-Type
+          value: application/javascript
+    - pattern: '**/*.mjs'
+      headers:
+        - key: Cache-Control
+          value: public,max-age=31536000,immutable
+        - key: Content-Type
+          value: application/javascript
     - pattern: '**/*.css'
       headers:
-        - key: 'Cache-Control'
-          value: 'public, max-age=31536000, immutable'
-    - pattern: '**/assets/**'
-      headers:
-        - key: 'Cache-Control'
-          value: 'public, max-age=31536000, immutable'
+        - key: Cache-Control
+          value: public,max-age=31536000,immutable
+        - key: Content-Type
+          value: text/css
     - pattern: 'index.html'
       headers:
-        - key: 'Cache-Control'
-          value: 'no-cache, no-store, must-revalidate'
+        - key: Cache-Control
+          value: public,max-age=0,must-revalidate
+        - key: Content-Type
+          value: text/html
+  redirects:
+    - source: /<*>
+      target: /index.html
+      status: 200

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { workOrdersApi, type Bill } from "@/lib/api";
+import { workOrdersApi, type WorkOrder } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,19 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useMemo } from "react";
-import { RefreshCw, Search, Plus, Eye, Settings } from "lucide-react";
+import { RefreshCw, Search, Plus, Eye, Settings, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: "bg-blue-100 text-blue-800",
-  in_progress: "bg-yellow-100 text-yellow-800", 
+  in_progress: "bg-yellow-100 text-yellow-800",
   completed: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
-  in_progress: "In Progress", 
+  in_progress: "In Progress",
   completed: "Completed",
   cancelled: "Cancelled",
 };
@@ -31,16 +31,16 @@ export default function WorkOrdersList() {
   const statusFilter = searchParams.get("status") || "all";
 
   // Core list
-  const listQuery = useQuery({ 
-    queryKey: ["work-orders"], 
-    queryFn: () => workOrdersApi.list() 
+  const listQuery = useQuery({
+    queryKey: ["work-orders"],
+    queryFn: () => workOrdersApi.list()
   });
 
-  const items: Bill[] = listQuery.data ? 
-    (Array.isArray(listQuery.data) ? listQuery.data as Bill[] : (listQuery.data.results ?? [])) : [];
+  const items: WorkOrder[] = listQuery.data ?
+    (Array.isArray(listQuery.data) ? listQuery.data as WorkOrder[] : (listQuery.data.results ?? [])) : [];
 
   // Group by status (simplified to 4 main statuses)
-  const groups: Record<string, Bill[]> = { 
+  const groups: Record<string, WorkOrder[]> = {
     all: items,
     upcoming: items.filter(b => b.status === 'scheduled'),
     inprocess: items.filter(b => b.status === 'in_progress'),
@@ -51,15 +51,15 @@ export default function WorkOrdersList() {
   // Filter and search
   const filteredItems = useMemo(() => {
     let filtered = statusFilter === "all" ? items : groups[statusFilter] || [];
-    
+
     if (searchTerm) {
-      filtered = filtered.filter(item => 
-        item.bill_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      filtered = filtered.filter(item =>
+        item.work_order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.quotation?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.quotation?.quotation_number?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     return filtered;
   }, [items, statusFilter, searchTerm, groups]);
 
@@ -69,7 +69,7 @@ export default function WorkOrdersList() {
     inprocess: groups.inprocess.length,
     completed: groups.completed.length,
     cancelled: groups.cancelled.length,
-    totalBalance: items.reduce((sum, b) => sum + (Number(b.remaining_balance)||0), 0)
+    totalBalance: items.reduce((sum, b) => sum + (Number(b.remaining_balance) || 0), 0)
   };
 
   const handleSearch = (value: string) => {
@@ -91,22 +91,22 @@ export default function WorkOrdersList() {
     setSearchParams(searchParams);
   };
 
-  const WorkOrderItem = ({ item }: { item: Bill }) => {
+  const WorkOrderItem = ({ item }: { item: WorkOrder }) => {
     const totalVal = Number(item.quoted_price) + Number(item.total_added_features_cost || 0);
-    
+
     return (
-      <Link 
-        to={`/work-orders/${item.id}`} 
+      <Link
+        to={`/work-orders/${item.id}`}
         className="flex items-center justify-between rounded-lg border p-4 hover:bg-accent transition-colors"
       >
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-3">
-            <div className="font-semibold text-lg">{item.bill_number}</div>
+            <div className="font-semibold text-lg">{item.work_order_number}</div>
             <Badge className={cn("text-xs", STATUS_COLORS[item.status] || "bg-gray-100 text-gray-800")}>
               {STATUS_LABELS[item.status] || item.status}
             </Badge>
           </div>
-          
+
           <div className="text-sm text-muted-foreground">
             {item.quotation?.customer?.name && (
               <div className="font-medium text-foreground">{item.quotation.customer.name}</div>
@@ -121,10 +121,10 @@ export default function WorkOrdersList() {
 
         <div className="text-right space-y-1">
           <div className="font-semibold text-lg">
-            ₹{totalVal.toLocaleString('en-IN', {maximumFractionDigits: 0})}
+            ₹{totalVal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </div>
           <div className="text-sm text-muted-foreground">
-            Balance: ₹{Number(item.remaining_balance || 0).toLocaleString('en-IN', {maximumFractionDigits: 0})}
+            Balance: ₹{Number(item.remaining_balance || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </div>
           <div className="flex items-center gap-2">
             <Eye className="h-4 w-4" />
@@ -136,16 +136,16 @@ export default function WorkOrdersList() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">
             {statusFilter === "all" ? "All Client Orders" :
-             statusFilter === "upcoming" ? "Upcoming Orders" :
-             statusFilter === "inprocess" ? "Inprocess Orders" :
-             statusFilter === "completed" ? "Completed Orders" :
-             statusFilter === "cancelled" ? "Cancelled Orders" : "All Client Orders"}
+              statusFilter === "upcoming" ? "Upcoming Orders" :
+                statusFilter === "inprocess" ? "Inprocess Orders" :
+                  statusFilter === "completed" ? "Completed Orders" :
+                    statusFilter === "cancelled" ? "Cancelled Orders" : "All Client Orders"}
           </h1>
           <p className="text-muted-foreground">Manage your work orders</p>
         </div>
@@ -153,6 +153,12 @@ export default function WorkOrdersList() {
           <Button variant="outline" size="sm">
             Export
           </Button>
+          <Link to="/work-orders/convert-to-bills">
+            <Button variant="outline" size="sm" className="gap-1">
+              <FileText className="h-4 w-4" />
+              Convert to Bills
+            </Button>
+          </Link>
           <Button size="sm" className="gap-1">
             <Plus className="h-4 w-4" />
             Create Project
@@ -190,9 +196,9 @@ export default function WorkOrdersList() {
             <SelectItem value="cancelled">Cancelled</SelectItem>
           </SelectContent>
         </Select>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => listQuery.refetch()}
           className="gap-1"
         >
@@ -209,7 +215,7 @@ export default function WorkOrdersList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
-              {listQuery.isLoading ? <Skeleton className="h-6 w-10"/> : stats.total}
+              {listQuery.isLoading ? <Skeleton className="h-6 w-10" /> : stats.total}
             </div>
           </CardContent>
         </Card>
@@ -270,8 +276,8 @@ export default function WorkOrdersList() {
         ) : filteredItems.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
-              {searchTerm || statusFilter !== "all" 
-                ? "No work orders found matching your criteria." 
+              {searchTerm || statusFilter !== "all"
+                ? "No work orders found matching your criteria."
                 : "No work orders found."
               }
             </p>

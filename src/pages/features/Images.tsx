@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { api } from "@/lib/api";
+import { api, API_ROOT } from "@/lib/api";
+import { runWithConcurrencyDetailed, maybeCompressImage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-
-const API_ROOT: string = (import.meta as any).env?.VITE_API_ROOT || "http://127.0.0.1:8000";
+import { useOrganization } from "@/hooks/useOrganization";
+// API_ROOT comes from central api helper; uses HTTPS in production
 
 interface VehicleModel { id: number; name: string }
 interface FeatureCategory { id: number; name: string }
@@ -16,8 +17,9 @@ interface FeatureImage { id: number; image: string; alt_text?: string | null; fe
 function fullImageUrl(path: string) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
-  if (path.startsWith("/")) return `${API_ROOT}${path}`;
-  return `${API_ROOT}/${path}`;
+  // Use the new Django S3 bucket for media files
+  if (path.startsWith("/")) return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com${path}`;
+  return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/${path}`;
 }
 
 function priceLabel(p: FeaturePrice): string {
@@ -28,6 +30,7 @@ function priceLabel(p: FeaturePrice): string {
 }
 
 export default function FeatureImagesPage() {
+  const { organizationName } = useOrganization();
   const [prices, setPrices] = useState<FeaturePrice[]>([]);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<number | null>(null);
@@ -39,7 +42,7 @@ export default function FeatureImagesPage() {
   const [savingByPrice, setSavingByPrice] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
-    document.title = "Feature Images | Nathkrupa ERP";
+    document.title = `Feature Images  | ${organizationName}`;
     api.get<FeaturePrice[]>("/feature-prices/")
       .then(async (prs) => {
         setPrices(prs);
@@ -58,7 +61,7 @@ export default function FeatureImagesPage() {
         }));
       })
       .catch(() => toast({ title: "Failed to load prices", variant: "destructive" }));
-  }, []);
+  }, [organizationName]);
 
   const filteredPrices = useMemo(() => {
     const q = query.toLowerCase();
@@ -111,19 +114,21 @@ export default function FeatureImagesPage() {
     if (!files.length) return;
     setSavingByPrice(prev => ({ ...prev, [priceId]: true }));
     try {
-      const uploaded: FeatureImage[] = [];
-      for (const f of files) {
+      const alt = altMap[priceId];
+      const { succeeded, errors } = await runWithConcurrencyDetailed(files, 4, async (f) => {
+        const uploadFile = await maybeCompressImage(f);
         const fd = new FormData();
         fd.append('feature_price_id', String(priceId));
-        fd.append('image', f);
-        const alt = altMap[priceId];
+        fd.append('image', uploadFile);
         if (alt) fd.append('alt_text', alt);
-        const created = await api.postForm<FeatureImage>(`/feature-images/`, fd);
-        uploaded.push(created);
-      }
-      setImagesByPrice(prev => ({ ...prev, [priceId]: [...(prev[priceId] || []), ...uploaded] }));
+        return api.postForm<FeatureImage>(`/feature-images/`, fd);
+      });
+      // Refresh the list from server to ensure UI reflects backend state
+      const fresh = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${priceId}`);
+      setImagesByPrice(prev => ({ ...prev, [priceId]: fresh }));
       setUploadQueue(prev => ({ ...prev, [priceId]: [] }));
-      toast({ title: `Uploaded ${uploaded.length} image${uploaded.length > 1 ? 's' : ''}` });
+  const ok = succeeded.length; const failed = errors.length;
+      toast({ title: `Uploaded ${ok} image${ok === 1 ? '' : 's'}` , ...(failed? { description: `${failed} failed` } : {}) });
     } catch (e: any) {
       const text = e?.message || 'Upload failed';
       toast({ title: text, variant: 'destructive' });
@@ -163,23 +168,23 @@ export default function FeatureImagesPage() {
           <div className="divide-y">
             {filteredPrices.map(p => {
               const pid = p.id;
-        const imgs = imagesByPrice[pid];
-        const primary = (imgs && imgs[0]) || primaryByPrice[pid] || null;
+              const imgs = imagesByPrice[pid];
+              const primary = (imgs && imgs[0]) || primaryByPrice[pid] || null;
               const isOpen = openId === pid;
               return (
                 <div key={pid} className="py-4">
                   <div className="flex items-center gap-4">
-          <div className="w-36 h-24 rounded-md overflow-hidden bg-muted/40 flex items-center justify-center">
+                    <div className="w-36 h-24 rounded-md overflow-hidden bg-muted/40 flex items-center justify-center">
                       {primary ? (
                         <img src={fullImageUrl(primary.image)} alt={primary.alt_text || ''} className="w-full h-full object-cover" />
                       ) : (
-            <div className="text-xs text-muted-foreground">{loadingByPrice[pid] ? 'Loading…' : 'No image'}</div>
+                        <div className="text-xs text-muted-foreground">{loadingByPrice[pid] ? 'Loading…' : 'No image'}</div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium truncate" title={priceLabel(p)}>{priceLabel(p)}</div>
                       <div className="text-xs text-muted-foreground">
-            {imgs ? `${imgs.length} image${imgs.length === 1 ? '' : 's'}` : (loadingByPrice[pid] ? 'Loading…' : 'More info to view gallery')}
+                        {imgs ? `${imgs.length} image${imgs.length === 1 ? '' : 's'}` : (loadingByPrice[pid] ? 'Loading…' : 'More info to view gallery')}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">

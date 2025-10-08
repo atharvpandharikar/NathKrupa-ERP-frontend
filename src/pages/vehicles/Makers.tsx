@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-
+import { useOrganization } from "@/hooks/useOrganization";
 interface VehicleMaker { id: number; name: string; description?: string | null }
 
 export default function VehicleMakersPage() {
+  const { organizationName } = useOrganization();
   const [items, setItems] = useState<VehicleMaker[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -18,11 +19,11 @@ export default function VehicleMakersPage() {
   const [form, setForm] = useState<{ name: string; description?: string }>({ name: "", description: "" });
 
   useEffect(() => {
-    document.title = "Vehicle Makers | Nathkrupa ERP";
+    document.title = `Vehicle Makers  | ${organizationName}`;
     api.get<VehicleMaker[]>("/vehicle-makers/")
       .then(setItems)
       .catch(() => toast({ title: "Failed to load makers", variant: "destructive" }));
-  }, []);
+  }, [organizationName]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();

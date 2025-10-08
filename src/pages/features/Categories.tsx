@@ -5,32 +5,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
+import { useOrganization } from "@/hooks/useOrganization";
 
 interface VehicleType { id: number; name: string; }
 interface FeatureCategory { id: number; name: string; description?: string | null; parent?: number | null; vehicle_types?: VehicleType[] }
 
 export default function FeatureCategoriesPage() {
+  const { organizationName } = useOrganization();
   const [items, setItems] = useState<FeatureCategory[]>([]);
   const [vtypes, setVtypes] = useState<VehicleType[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<FeatureCategory | null>(null);
-  const [formErrors, setFormErrors] = useState<{ name?: string; form?: string }>({});
+  const [formErrors, setFormErrors] = useState<{ name?: string; parent_id?: string; form?: string }>({});
   const [form, setForm] = useState<{ name: string; description?: string; parent_id?: number | null; vehicle_type_ids: number[] }>({ name: "", description: "", parent_id: null, vehicle_type_ids: [] });
   const [vtQuery, setVtQuery] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
   useEffect(() => {
-    document.title = "Feature Categories | Nathkrupa ERP";
+    document.title = `Feature Categories | ${organizationName}`;
     Promise.all([
       api.get<FeatureCategory[]>("/feature-categories/"),
       api.get<VehicleType[]>("/vehicle-types/"),
     ])
-    .then(([cats, types]) => { setItems(cats); setVtypes(types); })
-    .catch(() => toast({ title: "Failed to load data", variant: "destructive" }));
-  }, []);
+      .then(([cats, types]) => { setItems(cats); setVtypes(types); })
+      .catch(() => toast({ title: "Failed to load data", variant: "destructive" }));
+  }, [organizationName]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -54,7 +56,7 @@ export default function FeatureCategoriesPage() {
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => { setEditing(null); setForm({ name: "", description: "", vehicle_type_ids: [] }); setFormErrors({}); }}>Add Category</Button>
+            <Button onClick={() => { setEditing(null); setForm({ name: "", description: "", parent_id: null, vehicle_type_ids: [] }); setFormErrors({}); }}>Add Category</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -72,18 +74,20 @@ export default function FeatureCategoriesPage() {
                 <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Parent Category (optional)</label>
+                <label className="text-sm font-medium">Parent Category *</label>
                 <select
                   className="h-9 px-2 border rounded-md bg-background"
                   value={form.parent_id ?? ""}
                   onChange={(e) => setForm(f => ({ ...f, parent_id: e.target.value ? Number(e.target.value) : null }))}
                   aria-label="Parent Category"
+                  required
                 >
-                  <option value="">None</option>
-                  {items.map(pc => (
+                  <option value="">Select Parent Category</option>
+                  {items.filter(pc => pc.parent === null).map(pc => (
                     <option key={pc.id} value={pc.id}>{pc.name}</option>
                   ))}
                 </select>
+                {formErrors.parent_id && <p className="text-xs text-red-600">{formErrors.parent_id}</p>}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Vehicle Types (optional)</label>
@@ -111,6 +115,7 @@ export default function FeatureCategoriesPage() {
               <Button disabled={saving} onClick={async () => {
                 const errors: any = {};
                 if (!form.name.trim()) errors.name = 'Name is required';
+                if (!form.parent_id) errors.parent_id = 'Parent category is required';
                 setFormErrors(errors);
                 if (Object.keys(errors).length) return;
                 const payload: any = { name: form.name.trim(), description: form.description || "", vehicle_type_ids: form.vehicle_type_ids };

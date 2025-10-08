@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { workOrdersApi, paymentsApi, addedFeaturesApi, type Bill, type Payment, type AddedFeature } from "@/lib/api";
+import { workOrdersApi, addedFeaturesApi, type Bill, type AddedFeature } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,14 +13,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  CalendarDays, 
-  Clock, 
-  DollarSign, 
-  Package, 
-  CheckCircle, 
-  Truck, 
-  Printer, 
+import {
+  CalendarDays,
+  Clock,
+  DollarSign,
+  Package,
+  CheckCircle,
+  Truck,
+  Printer,
   ArrowLeft,
   User,
   Car,
@@ -37,14 +37,14 @@ import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: "bg-blue-100 text-blue-800",
-  in_progress: "bg-yellow-100 text-yellow-800", 
+  in_progress: "bg-yellow-100 text-yellow-800",
   completed: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
-  in_progress: "In Progress", 
+  in_progress: "In Progress",
   completed: "Completed",
   cancelled: "Cancelled",
 };
@@ -54,7 +54,7 @@ function WorkOrderDetails() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     amount: "",
@@ -65,51 +65,25 @@ function WorkOrderDetails() {
 
   // Queries
   const numericId = id && /^\d+$/.test(id) ? Number(id) : null;
-  
+
   const { data: workOrder, isLoading, error } = useQuery({
     queryKey: ["work-order", numericId],
     queryFn: () => workOrdersApi.getById(numericId!),
     enabled: numericId !== null
   });
 
-  const { data: payments = [] } = useQuery({
-    queryKey: ["payments", numericId],
-    queryFn: () => paymentsApi.list({ bill: Number(numericId!) }),
-    enabled: numericId !== null
-  });
+  // payments query removed - all payments now handled through finance app
 
   const { data: addedFeatures = [] } = useQuery({
-    queryKey: ["added-features", numericId],
-    queryFn: () => addedFeaturesApi.list({ bill: Number(numericId!) }),
-    enabled: numericId !== null
+    queryKey: ["added-features", workOrder?.id],
+    queryFn: () => addedFeaturesApi.list({ work_order: workOrder?.id }),
+    enabled: numericId !== null && !!workOrder?.id
   });
 
   // Mutations
-  const addPaymentMutation = useMutation({
-    mutationFn: paymentsApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payments", numericId] });
-      queryClient.invalidateQueries({ queryKey: ["work-order", numericId] });
-      setPaymentDialogOpen(false);
-      setPaymentForm({ amount: "", payment_type: "partial", notes: "", payment_date: new Date().toISOString().split('T')[0] });
-      toast({ title: "Payment added successfully" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Error adding payment", description: error.message, variant: "destructive" });
-    }
-  });
+  // addPaymentMutation removed - all payments now handled through finance app
 
-  const handleAddPayment = () => {
-    if (!workOrder || !paymentForm.amount) return;
-    
-    addPaymentMutation.mutate({
-      bill: workOrder.id,
-      amount: paymentForm.amount,
-      payment_type: paymentForm.payment_type as any,
-      notes: paymentForm.notes,
-      payment_date: paymentForm.payment_date
-    });
-  };
+  // handleAddPayment removed - all payments now handled through finance app
 
   // Early returns
   if (isLoading) return <div className="p-6">Loading work order...</div>;
@@ -118,11 +92,12 @@ function WorkOrderDetails() {
   if (!workOrder) return <div className="p-6">Work order not found</div>;
 
   const totalAmount = Number(workOrder.quoted_price) + Number(workOrder.total_added_features_cost || 0);
-  const paidAmount = Number(workOrder.total_payments || 0);
-  const balanceAmount = Number(workOrder.remaining_balance || 0);
+  // paidAmount and balanceAmount calculation removed - now handled through finance app
+  const paidAmount = 0; // Will be calculated from finance transactions
+  const balanceAmount = totalAmount - paidAmount;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -193,9 +168,9 @@ function WorkOrderDetails() {
                   </div>
                 </div>
               )}
-              
+
               <Separator />
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Vehicle Make</Label>
@@ -262,14 +237,14 @@ function WorkOrderDetails() {
                   <TabsTrigger value="original">Original Features</TabsTrigger>
                   <TabsTrigger value="additional">Additional Work</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="original" className="space-y-3">
                   {workOrder.quotation?.features && workOrder.quotation.features.length > 0 ? (
                     workOrder.quotation.features.map((feature: any, index: number) => (
                       <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                         <div>
                           <p className="font-medium">
-                            {feature.custom_name || feature.feature_type?.name || 'Feature'}
+                            {(feature as any).display_name || feature.custom_name || feature.feature_type?.name || (feature as any).feature_category?.name || 'Item'}
                           </p>
                         </div>
                       </div>
@@ -278,7 +253,7 @@ function WorkOrderDetails() {
                     <p className="text-muted-foreground">No original features listed</p>
                   )}
                 </TabsContent>
-                
+
                 <TabsContent value="additional" className="space-y-3">
                   {addedFeatures.length > 0 ? (
                     addedFeatures.map((feature: AddedFeature) => (
@@ -339,107 +314,12 @@ function WorkOrderDetails() {
                   <span className="font-bold">₹{balanceAmount.toLocaleString('en-IN')}</span>
                 </div>
               </div>
-              
-              <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="w-full" size="sm">
-                    <CreditCard className="h-4 w-4 mr-1" />
-                    Add Payment
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add Payment</DialogTitle>
-                    <DialogDescription>
-                      Record a new payment for this work order
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="amount">Amount</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        value={paymentForm.amount}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
-                        placeholder="Enter amount"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="payment_type">Payment Type</Label>
-                      <Select value={paymentForm.payment_type} onValueChange={(value) => setPaymentForm(prev => ({ ...prev, payment_type: value }))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="booking">Booking</SelectItem>
-                          <SelectItem value="partial">Partial</SelectItem>
-                          <SelectItem value="drop_off">Drop Off</SelectItem>
-                          <SelectItem value="final">Final</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="payment_date">Payment Date</Label>
-                      <Input
-                        id="payment_date"
-                        type="date"
-                        value={paymentForm.payment_date}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, payment_date: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="notes">Notes</Label>
-                      <Textarea
-                        id="notes"
-                        value={paymentForm.notes}
-                        onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
-                        placeholder="Payment notes (optional)"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleAddPayment} disabled={addPaymentMutation.isPending}>
-                      {addPaymentMutation.isPending ? "Adding..." : "Add Payment"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+
+              {/* Payment dialog removed - all payments now handled through finance app */}
             </CardContent>
           </Card>
 
-          {/* Payment History */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Payment History
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {payments.length > 0 ? (
-                  payments.map((payment: Payment) => (
-                    <div key={payment.id} className="flex justify-between items-center p-3 border rounded-lg">
-                      <div>
-                        <p className="font-medium">₹{Number(payment.amount).toLocaleString('en-IN')}</p>
-                        <p className="text-sm text-muted-foreground capitalize">
-                          {payment.payment_type} • {payment.payment_date}
-                        </p>
-                      </div>
-                      <Badge variant="outline">{payment.payment_type}</Badge>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-muted-foreground text-center py-4">No payments recorded</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Payment History removed - all payments now handled through finance app */}
 
           {/* Quick Actions */}
           <Card>

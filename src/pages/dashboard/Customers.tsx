@@ -9,9 +9,11 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Users, UserCheck, UserX, TrendingUp, Plus, Phone, Mail, MapPin, Search } from "lucide-react";
 import { customersApi, type Customer } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
+import { useOrganization } from "@/hooks/useOrganization";
 
 export default function Customers() {
   const navigate = useNavigate();
+  const { organizationName } = useOrganization();
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   // New customer form (WhatsApp + default address removed per business decision)
@@ -34,18 +36,18 @@ export default function Customers() {
       phone_number: newCustomer.phone_number,
       email: newCustomer.email || undefined,
     }),
-    onSuccess: () => { queryClient.invalidateQueries({queryKey:['customers']}); }
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['customers'] }); }
   });
 
   useEffect(() => {
-    document.title = "Customers | Nathkrupa ERP";
-  }, []);
+    document.title = `Customers | ${organizationName}`;
+  }, [organizationName]);
 
   const customers: Customer[] = customersData || [];
-  const filteredCustomers = useMemo(()=> customers.filter(customer =>
+  const filteredCustomers = useMemo(() => customers.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.phone_number.includes(searchTerm) ||
-    (customer.email||'').toLowerCase().includes(searchTerm.toLowerCase())
+    (customer.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   ), [customers, searchTerm]);
 
   const totalCustomers = customers.length;
@@ -59,10 +61,10 @@ export default function Customers() {
       toast({ title: "Missing fields", description: "Name and Phone are required" });
       return;
     }
-    createMutation.mutate(undefined, { 
+    createMutation.mutate(undefined, {
       onSuccess: () => {
         toast({ title: "Customer added" });
-  setNewCustomer({ name: "", phone_number: "", email: "" });
+        setNewCustomer({ name: "", phone_number: "", email: "" });
         setIsAddCustomerOpen(false);
       },
       onError: () => toast({ title: "Failed", description: "Could not add customer" })
@@ -96,7 +98,7 @@ export default function Customers() {
                 <Input
                   placeholder="Enter customer name"
                   value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({...newCustomer, name: e.target.value})}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
                   required
                 />
               </div>
@@ -105,7 +107,7 @@ export default function Customers() {
                 <Input
                   placeholder="Enter phone number"
                   value={newCustomer.phone_number}
-                  onChange={(e) => setNewCustomer({...newCustomer, phone_number: e.target.value})}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, phone_number: e.target.value })}
                   required
                 />
               </div>
@@ -115,7 +117,7 @@ export default function Customers() {
                   type="email"
                   placeholder="Enter email address"
                   value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({...newCustomer, email: e.target.value})}
+                  onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={createMutation.isPending}>
@@ -223,13 +225,17 @@ export default function Customers() {
                   if (customer.email) completionPercentage += 10; // bonus for email if present
                   if (isNaN(completionPercentage)) completionPercentage = 0;
                   return (
-                    <tr key={customer.id} className="border-b hover:bg-muted/30">
+                    <tr
+                      key={customer.id}
+                      className="border-b hover:bg-muted/30 cursor-pointer"
+                      onClick={() => navigate(`/dashboard/customers/${customer.id}`)}
+                    >
                       <td className="p-4">
                         <span className="font-medium">{index + 1}</span>
                       </td>
                       <td className="p-4">
                         <div className="font-medium">
-                          <span className="cursor-pointer hover:underline" onClick={()=>navigate(`/dashboard/customers/${customer.id}`)}>
+                          <span className="hover:underline">
                             {customer.email || customer.name}
                           </span>
                         </div>
@@ -247,10 +253,10 @@ export default function Customers() {
                         )}
                       </td>
                       <td className="p-4">
-            {customer.phone_number ? (
+                        {customer.phone_number ? (
                           <div className="flex items-center gap-2">
-              <span>{customer.phone_number}</span>
-              {customer.phone_number.startsWith("70") && (
+                            <span>{customer.phone_number}</span>
+                            {customer.phone_number.startsWith("70") && (
                               <Badge variant="outline" className="text-xs text-red-600">
                                 Not Verified
                               </Badge>
@@ -273,7 +279,7 @@ export default function Customers() {
                                   ? 'bg-orange-500'
                                   : 'bg-gray-400';
                               // map percent to nearest 10 for width class
-                              const pctBucket = Math.min(100, Math.max(0, Math.round(completionPercentage/10)*10));
+                              const pctBucket = Math.min(100, Math.max(0, Math.round(completionPercentage / 10) * 10));
                               const widthClass = `w-pct-${pctBucket}`; // custom utility classes to be added in global css
                               return <div className={`h-full rounded-full transition-all ${barColor} ${widthClass}`} />;
                             })()}

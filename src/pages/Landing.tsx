@@ -1,9 +1,10 @@
 import { useEffect } from "react";
-
+import { useOrganization } from "@/hooks/useOrganization";
 export default function Landing() {
+  const { organizationName } = useOrganization();
   useEffect(() => {
     document.title = "Nathkrupa ERP | Landing";
-  }, []);
+  }, [organizationName]);
 
   return (
     <main className="max-w-5xl mx-auto py-16">

@@ -22,3 +22,34 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Deployment and build artifacts
+deploy-*.zip
+deploy-*.log
+prod-*.log
+dist.zip
+tmpdist/
+.cursor/
+
+# Environment files
+.env.production
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# AWS/Amplify files
+.amplify-app.json
+amplify-custom-rules.json
+bucket-policy.json
+cors-config.json
+eb-cors-update.json
+nb-ecommerce-bucket-policy.json
+s3-website-policy.json
+
+# Deployment scripts (keep .bat and .ps1 but ignore logs)
+deploy-log.txt
+prod-deploy-log.txt
+
+# Temporary files
+tatus --porcelain

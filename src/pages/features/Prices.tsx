@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, API_ROOT } from "@/lib/api";
+import { runWithConcurrencyDetailed, maybeCompressImage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
-
-const API_ROOT: string = (import.meta as any).env?.VITE_API_ROOT || "http://127.0.0.1:8000";
+import { useOrganization } from "@/hooks/useOrganization";
+// API_ROOT from central helper; HTTPS in production
 function fullImageUrl(path: string) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
-  if (path.startsWith("/")) return `${API_ROOT}${path}`;
-  return `${API_ROOT}/${path}`;
+  // Use the new Django S3 bucket for media files
+  if (path.startsWith("/")) return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com${path}`;
+  return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/${path}`;
 }
 
 interface VehicleModel { id: number; name: string; }
@@ -22,6 +24,7 @@ interface FeaturePrice { id: number; vehicle_model: VehicleModel; feature_catego
 interface FeatureImage { id: number; image: string; alt_text?: string | null; feature_price: number }
 
 export default function FeaturePricesPage() {
+  const { organizationName } = useOrganization();
   const [items, setItems] = useState<FeaturePrice[]>([]);
   const [query, setQuery] = useState("");
   const [models, setModels] = useState<VehicleModel[]>([]);
@@ -56,31 +59,31 @@ export default function FeaturePricesPage() {
   const filteredTypes = (cid: number | "") => types.filter(t => t.category?.id === cid);
 
   useEffect(() => {
-    document.title = "Feature Prices | Nathkrupa ERP";
+    document.title = `Feature Prices  | ${organizationName}`;
     Promise.all([
       api.get<FeaturePrice[]>("/feature-prices/"),
       api.get<VehicleModel[]>("/vehicle-models/"),
       api.get<FeatureCategory[]>("/feature-categories/"),
       api.get<FeatureType[]>("/feature-types/"),
     ])
-    .then(async ([fps, vms, cats, fts]) => {
-      setItems(fps); setModels(vms); setCategories(cats); setTypes(fts);
-      // Prefetch a primary image for each row
-      await Promise.all(fps.map(async (fp) => {
-        const id = fp.id;
-        try {
-          setLoadingPrimary(prev => ({ ...prev, [id]: true }));
-          const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${id}`);
-          setPrimaryById(prev => ({ ...prev, [id]: imgs[0] || null }));
-        } catch {
-          // ignore
-        } finally {
-          setLoadingPrimary(prev => ({ ...prev, [id]: false }));
-        }
-      }));
-    })
-    .catch(console.error);
-  }, []);
+      .then(async ([fps, vms, cats, fts]) => {
+        setItems(fps); setModels(vms); setCategories(cats); setTypes(fts);
+        // Prefetch a primary image for each row
+        await Promise.all(fps.map(async (fp) => {
+          const id = fp.id;
+          try {
+            setLoadingPrimary(prev => ({ ...prev, [id]: true }));
+            const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${id}`);
+            setPrimaryById(prev => ({ ...prev, [id]: imgs[0] || null }));
+          } catch {
+            // ignore
+          } finally {
+            setLoadingPrimary(prev => ({ ...prev, [id]: false }));
+          }
+        }));
+      })
+      .catch(console.error);
+  }, [organizationName]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -152,78 +155,78 @@ export default function FeaturePricesPage() {
                 <label className="text-sm font-medium">Price</label>
                 <Input type="number" min="0" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
                 {formErrors.price && <p className="text-xs text-red-600">{formErrors.price}</p>}
-              {/* Inline image upload (optional) */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Images (optional)</label>
-                <div
-                  className="border-2 border-dashed rounded-md p-4 text-center hover:bg-muted/30 cursor-pointer"
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = 'image/*';
-                    input.multiple = true;
-                    input.onchange = () => {
-                      const selected = Array.from(input.files || []).filter(f => f.type.startsWith('image/'));
-                      if (selected.length) setUploadFiles(prev => [...prev, ...selected]);
-                    };
-                    input.click();
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); }}
-                  onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/')); if (files.length) setUploadFiles(prev => [...prev, ...files]); }}
-                >
-                  <p className="text-sm text-muted-foreground">Drag & drop images here, or click to select</p>
-                </div>
-                {/* Existing images (edit mode) */}
-                {editing && (
-                  <div className="mt-2">
-                    <div className="text-xs text-muted-foreground mb-1">Existing images</div>
-                    {editImagesLoading ? (
-                      <div className="p-4 text-center text-muted-foreground">Loading…</div>
-                    ) : editImages && editImages.length > 0 ? (
-                      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                        {editImages.map(img => (
-                          <div key={img.id} className="border rounded-md overflow-hidden">
-                            <div className="aspect-square bg-muted/40 flex items-center justify-center overflow-hidden">
-                              <img src={fullImageUrl(img.image)} alt={img.alt_text || ''} className="w-full h-full object-cover" />
+                {/* Inline image upload (optional) */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Images (optional)</label>
+                  <div
+                    className="border-2 border-dashed rounded-md p-4 text-center hover:bg-muted/30 cursor-pointer"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'image/*';
+                      input.multiple = true;
+                      input.onchange = () => {
+                        const selected = Array.from(input.files || []).filter(f => f.type.startsWith('image/'));
+                        if (selected.length) setUploadFiles(prev => [...prev, ...selected]);
+                      };
+                      input.click();
+                    }}
+                    onDragOver={(e) => { e.preventDefault(); }}
+                    onDrop={(e) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/')); if (files.length) setUploadFiles(prev => [...prev, ...files]); }}
+                  >
+                    <p className="text-sm text-muted-foreground">Drag & drop images here, or click to select</p>
+                  </div>
+                  {/* Existing images (edit mode) */}
+                  {editing && (
+                    <div className="mt-2">
+                      <div className="text-xs text-muted-foreground mb-1">Existing images</div>
+                      {editImagesLoading ? (
+                        <div className="p-4 text-center text-muted-foreground">Loading…</div>
+                      ) : editImages && editImages.length > 0 ? (
+                        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                          {editImages.map(img => (
+                            <div key={img.id} className="border rounded-md overflow-hidden">
+                              <div className="aspect-square bg-muted/40 flex items-center justify-center overflow-hidden">
+                                <img src={fullImageUrl(img.image)} alt={img.alt_text || ''} className="w-full h-full object-cover" />
+                              </div>
+                              <div className="p-1 flex items-center justify-between gap-2 text-xs">
+                                <span className="truncate" title={img.alt_text || undefined}>{img.alt_text || '—'}</span>
+                                <Button size="sm" className="h-6 px-2 py-0 text-xs" variant="destructive" onClick={async () => {
+                                  if (!confirm('Delete this image?')) return;
+                                  try {
+                                    await api.del<void>(`/feature-images/${img.id}/`);
+                                    setEditImages(prev => (prev || []).filter(i => i.id !== img.id));
+                                    toast({ title: 'Image deleted' });
+                                  } catch { toast({ title: 'Delete failed', variant: 'destructive' }); }
+                                }}>Delete</Button>
+                              </div>
                             </div>
-                            <div className="p-1 flex items-center justify-between gap-2 text-xs">
-                              <span className="truncate" title={img.alt_text || undefined}>{img.alt_text || '—'}</span>
-                              <Button size="sm" className="h-6 px-2 py-0 text-xs" variant="destructive" onClick={async () => {
-                                if (!confirm('Delete this image?')) return;
-                                try {
-                                  await api.del<void>(`/feature-images/${img.id}/`);
-                                  setEditImages(prev => (prev || []).filter(i => i.id !== img.id));
-                                  toast({ title: 'Image deleted' });
-                                } catch { toast({ title: 'Delete failed', variant: 'destructive' }); }
-                              }}>Delete</Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 text-center text-muted-foreground">No images yet</div>
-                    )}
-                  </div>
-                )}
-                {uploadFiles.length > 0 && (
-                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                    {uploadFiles.map((f, idx) => (
-                      <div key={`${f.name}-${idx}`} className="relative border rounded-md overflow-hidden">
-                        <img src={URL.createObjectURL(f)} alt={f.name} className="w-full h-24 object-cover" />
-                        <button type="button" className="absolute top-1 right-1 bg-black/60 text-white text-xs px-1 rounded" onClick={() => setUploadFiles(prev => prev.filter((_, i) => i !== idx))}>Remove</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-                  <div className="md:col-span-2">
-                    <Input placeholder="Alt text (applies to all uploaded images)" value={uploadAlt} onChange={e => setUploadAlt(e.target.value)} />
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" size="sm" onClick={() => { setUploadFiles([]); setUploadAlt(""); }}>Clear</Button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center text-muted-foreground">No images yet</div>
+                      )}
+                    </div>
+                  )}
+                  {uploadFiles.length > 0 && (
+                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {uploadFiles.map((f, idx) => (
+                        <div key={`${f.name}-${idx}`} className="relative border rounded-md overflow-hidden">
+                          <img src={URL.createObjectURL(f)} alt={f.name} className="w-full h-24 object-cover" />
+                          <button type="button" className="absolute top-1 right-1 bg-black/60 text-white text-xs px-1 rounded" onClick={() => setUploadFiles(prev => prev.filter((_, i) => i !== idx))}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                    <div className="md:col-span-2">
+                      <Input placeholder="Alt text (applies to all uploaded images)" value={uploadAlt} onChange={e => setUploadAlt(e.target.value)} />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="outline" size="sm" onClick={() => { setUploadFiles([]); setUploadAlt(""); }}>Clear</Button>
+                    </div>
                   </div>
                 </div>
-              </div>
               </div>
             </div>
             <DialogFooter>
@@ -260,20 +263,21 @@ export default function FeaturePricesPage() {
                   }
                   // Upload images if any
                   if (uploadFiles.length > 0) {
-                    let uploaded = 0;
-                    for (const f of uploadFiles) {
+                    const { succeeded, errors } = await runWithConcurrencyDetailed(uploadFiles, 4, async (f) => {
+                      const uploadFile = await maybeCompressImage(f);
                       const fd = new FormData();
                       fd.append('feature_price_id', String(target.id));
-                      fd.append('image', f);
+                      fd.append('image', uploadFile);
                       if (uploadAlt) fd.append('alt_text', uploadAlt);
-                      try { await api.postForm<FeatureImage>(`/feature-images/`, fd); uploaded++; } catch {}
-                    }
-                    toast({ title: `Uploaded ${uploaded} image${uploaded !== 1 ? 's' : ''}` });
+                      return api.postForm<FeatureImage>(`/feature-images/`, fd);
+                    });
+                    const ok = succeeded.length; const failed = errors.length;
+                    toast({ title: `Uploaded ${ok} image${ok !== 1 ? 's' : ''}`, ...(failed ? { description: `${failed} failed` } : {}) });
                   }
                   setOpen(false);
                 } catch (e: any) {
                   let msg = e?.message || 'Save failed';
-                  try { const parsed = JSON.parse(msg); msg = JSON.stringify(parsed); } catch {}
+                  try { const parsed = JSON.parse(msg); msg = JSON.stringify(parsed); } catch { }
                   setFormErrors({ form: msg });
                   toast({ title: 'Failed to save', variant: 'destructive' });
                 } finally {
@@ -452,18 +456,20 @@ export default function FeaturePricesPage() {
                       if (!detailsItem || detailsFiles.length === 0) return;
                       setDetailsUploading(true);
                       try {
-                        let uploaded: FeatureImage[] = [];
-                        for (const f of detailsFiles) {
+                        const { succeeded, errors } = await runWithConcurrencyDetailed(detailsFiles, 4, async (f) => {
+                          const uploadFile = await maybeCompressImage(f);
                           const fd = new FormData();
                           fd.append('feature_price_id', String(detailsItem.id));
-                          fd.append('image', f);
+                          fd.append('image', uploadFile);
                           if (detailsAlt) fd.append('alt_text', detailsAlt);
-                          const created = await api.postForm<FeatureImage>(`/feature-images/`, fd);
-                          uploaded.push(created);
-                        }
-                        setDetailsImages(prev => ([...(prev || []), ...uploaded]));
+                          return api.postForm<FeatureImage>(`/feature-images/`, fd);
+                        });
+                        // refresh list from server
+                        const fresh = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${detailsItem.id}`);
+                        setDetailsImages(fresh);
                         setDetailsFiles([]);
-                        toast({ title: `Uploaded ${uploaded.length} image${uploaded.length !== 1 ? 's' : ''}` });
+                        const ok = succeeded.length; const failed = errors.length;
+                        toast({ title: `Uploaded ${ok} image${ok !== 1 ? 's' : ''}`, ...(failed ? { description: `${failed} failed` } : {}) });
                       } catch {
                         toast({ title: 'Upload failed', variant: 'destructive' });
                       } finally {

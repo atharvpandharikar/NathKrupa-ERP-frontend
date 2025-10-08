@@ -1,13 +1,16 @@
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Navbar } from "./Navbar";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useOrganization } from "@/hooks/useOrganization";
 
 export default function MainLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useLocalStorage<boolean>("nk:sidebar-open", true);
-  
+  const { organizationName } = useOrganization();
+
   // Hide sidebar for quote generation page, but keep navbar
   const shouldHideSidebar = location.pathname === '/quotations/generate';
   const sidebarOpen = shouldHideSidebar ? false : open;
@@ -20,14 +23,17 @@ export default function MainLayout() {
             <SidebarContent className="overflow-visible">
               <SidebarGroup>
                 <SidebarGroupLabel>
-                  <span className="inline-flex items-center gap-2">
+                  <button
+                    onClick={() => navigate('/app-selection')}
+                    className="inline-flex items-center gap-2 hover:bg-sidebar-accent/50 rounded-md px-2 py-1 transition-colors cursor-pointer"
+                  >
                     <img
-                      src="https://shop-nathkrupabody.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder+(1).ico"
+                      src="https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/favicon1.ico"
                       alt="Nathkrupa"
-                      className="h-4 w-4"
+                      className="h-8 w-12"
                     />
-                    <span>Nathkrupa ERP</span>
-                  </span>
+                    <span className="text-black">{organizationName}</span>
+                  </button>
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
                   <SidebarMenu>

@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-
+import { useOrganization } from "@/hooks/useOrganization";
 interface VehicleType { id: number; code: string; name: string; description?: string | null }
 
 export default function VehicleTypesPage() {
+  const { organizationName } = useOrganization();
   const [items, setItems] = useState<VehicleType[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -18,11 +19,11 @@ export default function VehicleTypesPage() {
   const [form, setForm] = useState<{ code: string; name: string; description?: string }>({ code: "", name: "", description: "" });
 
   useEffect(() => {
-    document.title = "Vehicle Types | Nathkrupa ERP";
+    document.title = `Vehicle Types  | ${organizationName}`;
     api.get<VehicleType[]>("/vehicle-types/")
       .then(setItems)
       .catch(() => toast({ title: "Failed to load vehicle types", variant: "destructive" }));
-  }, []);
+  }, [organizationName]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();

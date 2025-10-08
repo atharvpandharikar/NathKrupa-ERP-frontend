@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
-
+import { useOrganization } from "@/hooks/useOrganization";
 interface VehicleType { id: number; name: string; }
 interface VehicleMaker { id: number; name: string; }
 interface VehicleModel { id: number; name: string; description?: string | null; maker: VehicleMaker; vehicle_type: VehicleType }
 
 export default function VehicleModelsPage() {
+  const { organizationName } = useOrganization();
   const [items, setItems] = useState<VehicleModel[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -23,7 +24,7 @@ export default function VehicleModelsPage() {
   const [form, setForm] = useState<{ name: string; description?: string; maker_id: number | ""; vehicle_type_id: number | "" }>({ name: "", description: "", maker_id: "", vehicle_type_id: "" });
 
   useEffect(() => {
-    document.title = "Vehicle Models | Nathkrupa ERP";
+    document.title = `Vehicle Models  | ${organizationName}`;
     Promise.all([
       api.get<VehicleModel[]>("/vehicle-models/"),
       api.get<VehicleMaker[]>("/vehicle-makers/"),
@@ -31,7 +32,7 @@ export default function VehicleModelsPage() {
     ])
     .then(([vms, mks, vts]) => { setItems(vms); setMakers(mks); setTypes(vts); })
     .catch(() => toast({ title: "Failed to load models", variant: "destructive" }));
-  }, []);
+  }, [organizationName]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
