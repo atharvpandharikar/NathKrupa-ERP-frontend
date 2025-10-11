@@ -176,7 +176,7 @@ export default function AppSelection() {
                 <div className="text-center mb-12">
                     <div className="flex justify-center mb-6">
                         <img
-                            src="https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/favicon1.ico"
+                            src="https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/favicon.ico"
                             alt="Nathkrupa Logo"
                             className="h-28 w-44 rounded-lg shadow-lg"
                         />

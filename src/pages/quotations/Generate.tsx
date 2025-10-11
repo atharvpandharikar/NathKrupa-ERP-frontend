@@ -28,9 +28,9 @@ interface FeatureImage { id: number; image: string; alt_text?: string | null; fe
 function fullImageUrl(path: string) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
-  // Use the new Django S3 bucket for media files
-  if (path.startsWith("/")) return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com${path}`;
-  return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/${path}`;
+  // Use the new unified storage S3 bucket for media files
+  if (path.startsWith("/")) return `https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com${path}`;
+  return `https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/${path}`;
 }
 type CustomerInfo = {
   name: string;
@@ -399,24 +399,24 @@ export default function GenerateQuotation() {
       const categoryImages: {
         [key: number]: string;
       } = {
-        10: "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png",
+        10: "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png",
         // Front Section
-        30: "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png",
+        30: "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png",
         // Rear Section
-        40: "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png",
+        40: "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png",
         // Side Section
-        50: "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png",
+        50: "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png",
         // Inside Cargo Body
-        60: "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png",
+        60: "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png",
         // On Chassis / Underbody
-        70: "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png",
+        70: "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png",
         // Accessories
-        76: "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png" // Painting
+        76: "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png" // Painting
       };
-      if (activeParentCategory == null) return "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png";
-      return categoryImages[activeParentCategory] || "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png";
+      if (activeParentCategory == null) return "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png";
+      return categoryImages[activeParentCategory] || "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png";
     }
-    return "https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder-1.png";
+    return "https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/Nathkrupa+Body+Builder.png";
   };
   if (step === 1) {
     return <section className="space-y-6">
@@ -676,7 +676,10 @@ export default function GenerateQuotation() {
                           const featureEntry = featurePriceMap[ftId];
                           const categoryEntry = categoryPriceMap[ftId];
 
+                          console.log('Loading images for ftId:', ftId, 'featureEntry:', featureEntry, 'categoryEntry:', categoryEntry);
+
                           if (!featureEntry && !categoryEntry) {
+                            console.log('No price entry found for ftId:', ftId);
                             setImagesByFt(prev => ({ ...prev, [ftId]: [] }));
                             return;
                           }
@@ -685,9 +688,12 @@ export default function GenerateQuotation() {
                             setLoadingImagesByFt(prev => ({ ...prev, [ftId]: true }));
                             // Use the appropriate price ID for the API call
                             const priceId = featureEntry ? featureEntry.fpId : categoryEntry.fpId;
+                            console.log('Fetching images for priceId:', priceId);
                             const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${priceId}`);
+                            console.log('Loaded images:', imgs);
                             setImagesByFt(prev => ({ ...prev, [ftId]: imgs }));
-                          } catch {
+                          } catch (error) {
+                            console.error('Error loading images:', error);
                             setImagesByFt(prev => ({ ...prev, [ftId]: [] }));
                           } finally {
                             setLoadingImagesByFt(prev => ({ ...prev, [ftId]: false }));

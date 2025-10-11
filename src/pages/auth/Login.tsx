@@ -43,7 +43,7 @@ export default function Login() {
           {/* Company Logo and Name */}
           <div className="flex justify-center mb-4">
             <img
-              src="https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/favicon1.ico"
+              src="https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/favicon.ico"
               alt="Nathkrupa Logo"
               className="h-12 w-18 rounded"
             />

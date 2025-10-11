@@ -12,9 +12,9 @@ import { useOrganization } from "@/hooks/useOrganization";
 function fullImageUrl(path: string) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
-  // Use the new Django S3 bucket for media files
-  if (path.startsWith("/")) return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com${path}`;
-  return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/${path}`;
+  // Use the new unified storage S3 bucket for media files
+  if (path.startsWith("/")) return `https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com${path}`;
+  return `https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/${path}`;
 }
 
 interface VehicleModel { id: number; name: string; }

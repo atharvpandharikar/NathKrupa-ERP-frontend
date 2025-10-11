@@ -44,7 +44,7 @@ export function Navbar() {
         <SidebarTrigger />
         <Link to="/app-selection" className="font-semibold flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity">
           <img
-            src="https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/favicon1.ico"
+            src="https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/favicon.ico"
             alt="Nathkrupa"
 
             className="h-8 w-12"

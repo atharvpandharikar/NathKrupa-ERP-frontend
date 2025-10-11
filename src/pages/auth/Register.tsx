@@ -13,7 +13,7 @@ export default function Register() {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <img
-              src="https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/favicon1.ico"
+              src="https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/favicon.ico"
               alt="Nathkrupa Logo"
               className="h-16 w-16 rounded-lg shadow-lg"
             />

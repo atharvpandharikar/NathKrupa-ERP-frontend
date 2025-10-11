@@ -28,7 +28,7 @@ export default function MainLayout() {
                     className="inline-flex items-center gap-2 hover:bg-sidebar-accent/50 rounded-md px-2 py-1 transition-colors cursor-pointer"
                   >
                     <img
-                      src="https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/favicon1.ico"
+                      src="https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/favicon.ico"
                       alt="Nathkrupa"
                       className="h-8 w-12"
                     />

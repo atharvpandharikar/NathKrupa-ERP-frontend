@@ -17,9 +17,9 @@ interface FeatureImage { id: number; image: string; alt_text?: string | null; fe
 function fullImageUrl(path: string) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;
-  // Use the new Django S3 bucket for media files
-  if (path.startsWith("/")) return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com${path}`;
-  return `https://nathkrupa-bilder-s3.s3.ap-south-1.amazonaws.com/${path}`;
+  // Use the new unified storage S3 bucket for media files
+  if (path.startsWith("/")) return `https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com${path}`;
+  return `https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/${path}`;
 }
 
 function priceLabel(p: FeaturePrice): string {
@@ -51,9 +51,12 @@ export default function FeatureImagesPage() {
           const pid = p.id;
           try {
             setLoadingByPrice(prev => ({ ...prev, [pid]: true }));
+            console.log('Loading initial images for priceId:', pid);
             const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${pid}`);
+            console.log('Loaded initial images for priceId', pid, ':', imgs);
             setPrimaryByPrice(prev => ({ ...prev, [pid]: imgs[0] || null }));
-          } catch {
+          } catch (error) {
+            console.error('Error loading initial images for priceId', pid, ':', error);
             // ignore per-row failures
           } finally {
             setLoadingByPrice(prev => ({ ...prev, [pid]: false }));
@@ -71,9 +74,12 @@ export default function FeatureImagesPage() {
   const loadImages = useCallback(async (priceId: number) => {
     setLoadingByPrice(prev => ({ ...prev, [priceId]: true }));
     try {
+      console.log('Loading images for priceId:', priceId);
       const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${priceId}`);
+      console.log('Loaded images for priceId', priceId, ':', imgs);
       setImagesByPrice(prev => ({ ...prev, [priceId]: imgs }));
-    } catch {
+    } catch (error) {
+      console.error('Error loading images for priceId', priceId, ':', error);
       toast({ title: 'Failed to load images', variant: 'destructive' });
     } finally {
       setLoadingByPrice(prev => ({ ...prev, [priceId]: false }));
@@ -127,8 +133,8 @@ export default function FeatureImagesPage() {
       const fresh = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${priceId}`);
       setImagesByPrice(prev => ({ ...prev, [priceId]: fresh }));
       setUploadQueue(prev => ({ ...prev, [priceId]: [] }));
-  const ok = succeeded.length; const failed = errors.length;
-      toast({ title: `Uploaded ${ok} image${ok === 1 ? '' : 's'}` , ...(failed? { description: `${failed} failed` } : {}) });
+      const ok = succeeded.length; const failed = errors.length;
+      toast({ title: `Uploaded ${ok} image${ok === 1 ? '' : 's'}`, ...(failed ? { description: `${failed} failed` } : {}) });
     } catch (e: any) {
       const text = e?.message || 'Upload failed';
       toast({ title: text, variant: 'destructive' });
@@ -176,9 +182,22 @@ export default function FeatureImagesPage() {
                   <div className="flex items-center gap-4">
                     <div className="w-36 h-24 rounded-md overflow-hidden bg-muted/40 flex items-center justify-center">
                       {primary ? (
-                        <img src={fullImageUrl(primary.image)} alt={primary.alt_text || ''} className="w-full h-full object-cover" />
+                        <img
+                          src={fullImageUrl(primary.image)}
+                          alt={primary.alt_text || ''}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Image load error for priceId', pid, ':', primary.image, 'Full URL:', fullImageUrl(primary.image));
+                            e.currentTarget.style.display = 'none';
+                          }}
+                          onLoad={() => {
+                            console.log('Image loaded successfully for priceId', pid, ':', primary.image, 'Full URL:', fullImageUrl(primary.image));
+                          }}
+                        />
                       ) : (
-                        <div className="text-xs text-muted-foreground">{loadingByPrice[pid] ? 'Loading…' : 'No image'}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {loadingByPrice[pid] ? 'Loading…' : `No image (pid: ${pid})`}
+                        </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
