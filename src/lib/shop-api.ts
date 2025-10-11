@@ -5,7 +5,7 @@
 const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 
 export const SHOP_API_ROOT = isProduction
-    ? "https://db.nathkrupabody.com"
+    ? "https://pg.nathkrupabody.com"  // Always use HTTPS in production
     : "http://127.0.0.1:8000";
 
 const SHOP_BASE = `${SHOP_API_ROOT}/api/shop`;

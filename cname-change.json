@@ -1,0 +1,17 @@
+{
+    "Changes": [
+        {
+            "Action": "CREATE",
+            "ResourceRecordSet": {
+                "Name": "pg.nathkrupabody.com",
+                "Type": "CNAME",
+                "TTL": 300,
+                "ResourceRecords": [
+                    {
+                        "Value": "nathkrupa-erp-canary.eba-dtyvmh2p.ap-south-1.elasticbeanstalk.com"
+                    }
+                ]
+            }
+        }
+    ]
+}
