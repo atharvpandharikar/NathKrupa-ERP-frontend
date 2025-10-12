@@ -95,6 +95,7 @@ export default function GenerateQuotation() {
   // Images cache: feature_type.id => images
   const [imagesByFt, setImagesByFt] = useState<Record<number, FeatureImage[] | null>>({});
   const [loadingImagesByFt, setLoadingImagesByFt] = useState<Record<number, boolean>>({});
+  const [loadedCategories, setLoadedCategories] = useState<Set<number>>(new Set());
   const [selectedFeaturesOpen, setSelectedFeaturesOpen] = useState(false);
   const [imageZoom, setImageZoom] = useState(1);
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
@@ -106,6 +107,9 @@ export default function GenerateQuotation() {
   // Reset focused feature when switching parent categories
   useEffect(() => {
     setFocusedFeatureId(null);
+    if (activeParentCategory) {
+      loadFeaturesForCategory(activeParentCategory);
+    }
   }, [activeParentCategory]);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -181,11 +185,44 @@ export default function GenerateQuotation() {
   // When model changes, load types and prices for that model
   useEffect(() => {
     if (!vehicle.modelId) { setTypesForModel([]); setFeaturePriceMap({}); setImagesByFt({}); setLoadingImagesByFt({}); return; }
-    Promise.all([
-      api.get<FeatureType[]>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}`),
-      api.get<FeaturePrice[]>(`/feature-prices/?vehicle_model=${vehicle.modelId}`)
-    ]).then(([fts, fps]) => {
-      setTypesForModel(fts);
+
+    // Clear previously loaded data when model changes
+    setLoadedCategories(new Set());
+    setTypesForModel([]);
+    setFeaturePriceMap({});
+    setCategoryPriceMap({});
+    setImagesByFt({});
+    setLoadingImagesByFt({});
+
+    if (activeParentCategory) {
+      loadFeaturesForCategory(activeParentCategory);
+    }
+  }, [vehicle.modelId]);
+
+  const loadFeaturesForCategory = async (categoryId: number) => {
+    if (!vehicle.modelId || loadedCategories.has(categoryId)) return;
+
+    const relevantCategoryIds = [categoryId, ...subCats(categoryId).map(sc => sc.id)];
+
+    try {
+      // Fetch feature types and prices for each category separately and aggregate
+      const typePromises = relevantCategoryIds.map(cid =>
+        api.get<FeatureType[]>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}&category_id=${cid}`)
+      );
+      const pricePromises = relevantCategoryIds.map(cid =>
+        api.get<FeaturePrice[]>(`/feature-prices/?vehicle_model=${vehicle.modelId}&feature_category=${cid}`)
+      );
+
+      const [ftsArrays, fpsArrays] = await Promise.all([
+        Promise.all(typePromises),
+        Promise.all(pricePromises)
+      ]);
+
+      const fts = ftsArrays.flat();
+      const fps = fpsArrays.flat();
+
+      setTypesForModel(prev => [...prev, ...fts]);
+
       const featureMap: Record<number, { price: number; fpId: number }> = {};
       const categoryMap: Record<number, { price: number; fpId: number }> = {};
       for (const fp of fps) {
@@ -193,19 +230,22 @@ export default function GenerateQuotation() {
         if (Number.isNaN(priceNum)) continue;
 
         if (fp.feature_type && fp.feature_type.id) {
-          // Feature has a type
           featureMap[fp.feature_type.id] = { price: priceNum, fpId: fp.id };
         } else if (fp.feature_category && fp.feature_category.id) {
-          // Feature has only a category (no type)
           categoryMap[fp.feature_category.id] = { price: priceNum, fpId: fp.id };
         }
       }
-      setFeaturePriceMap(featureMap);
-      setCategoryPriceMap(categoryMap);
-      setImagesByFt({});
-      setLoadingImagesByFt({});
-    }).catch(() => toast({ title: 'Failed to load features/prices', variant: 'destructive' }));
-  }, [vehicle.modelId]);
+
+      setFeaturePriceMap(prev => ({ ...prev, ...featureMap }));
+      setCategoryPriceMap(prev => ({ ...prev, ...categoryMap }));
+
+      setLoadedCategories(prev => new Set(prev).add(categoryId));
+
+    } catch (error) {
+      toast({ title: `Failed to load features for category ${categoryId}`, variant: 'destructive' });
+    }
+  };
+
   const total = useMemo(() => {
     return Object.entries(selected).reduce((sum: number, [categoryId, selectedId]) => {
       if (!selectedId) return sum;
@@ -586,7 +626,12 @@ export default function GenerateQuotation() {
                     <CardTitle className="text-base">{parentCat.name} - Features</CardTitle>
                   </CardHeader>
                   <CardContent className="flex-1 overflow-y-auto space-y-4 max-h-[calc(100vh-300px)] scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-background hover:scrollbar-thumb-border/60 transition-all duration-300 pr-2">
-                    {subCats(parentCat.id).map(subCat => {
+                    {!loadedCategories.has(parentCat.id) && (
+                      <div className="text-center p-8 text-muted-foreground">
+                        Loading features...
+                      </div>
+                    )}
+                    {loadedCategories.has(parentCat.id) && subCats(parentCat.id).map(subCat => {
                       const features = typesForModel.filter(ft => ft.category.id === subCat.id);
                       const categoryPrice = categoryPriceMap[subCat.id];
                       const hasFeatures = features.length > 0;

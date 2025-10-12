@@ -6,14 +6,21 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOptimizedFeatureCategoriesPageData } from "@/hooks/useOptimizedData";
 
 interface VehicleType { id: number; name: string; }
 interface FeatureCategory { id: number; name: string; description?: string | null; parent?: number | null; vehicle_types?: VehicleType[] }
 
 export default function FeatureCategoriesPage() {
   const { organizationName } = useOrganization();
-  const [items, setItems] = useState<FeatureCategory[]>([]);
-  const [vtypes, setVtypes] = useState<VehicleType[]>([]);
+  const {
+    categories: items,
+    vehicleTypes: vtypes,
+    loading,
+    error,
+  } = useOptimizedFeatureCategoriesPageData();
+
+  const [itemsState, setItems] = useState<FeatureCategory[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -26,19 +33,22 @@ export default function FeatureCategoriesPage() {
 
   useEffect(() => {
     document.title = `Feature Categories | ${organizationName}`;
-    Promise.all([
-      api.get<FeatureCategory[]>("/feature-categories/"),
-      api.get<VehicleType[]>("/vehicle-types/"),
-    ])
-      .then(([cats, types]) => { setItems(cats); setVtypes(types); })
-      .catch(() => toast({ title: "Failed to load data", variant: "destructive" }));
-  }, [organizationName]);
+    if (error) {
+      toast({ title: "Failed to load data", variant: "destructive" });
+    }
+  }, [organizationName, error]);
+
+  useEffect(() => {
+    if (items) {
+      setItems(items);
+    }
+  }, [items]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    const list = items.filter(c => c.name.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q));
+    const list = itemsState.filter(c => c.name.toLowerCase().includes(q) || (c.description || '').toLowerCase().includes(q));
     return list;
-  }, [items, query]);
+  }, [itemsState, query]);
 
   const paged = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -46,6 +56,30 @@ export default function FeatureCategoriesPage() {
   }, [filtered, page]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+  if (loading) {
+    return (
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">Feature Categories</h1>
+            <p className="text-sm text-muted-foreground">Reusable categories, optionally linked to vehicle types</p>
+          </div>
+          <Button disabled>Add Category</Button>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Categories...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center p-8 text-muted-foreground">
+              Please wait while we load the data.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">
@@ -83,7 +117,7 @@ export default function FeatureCategoriesPage() {
                   required
                 >
                   <option value="">Select Parent Category</option>
-                  {items.filter(pc => pc.parent === null).map(pc => (
+                  {itemsState.filter(pc => pc.parent === null).map(pc => (
                     <option key={pc.id} value={pc.id}>{pc.name}</option>
                   ))}
                 </select>

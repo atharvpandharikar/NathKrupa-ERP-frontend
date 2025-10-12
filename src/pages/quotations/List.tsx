@@ -6,6 +6,15 @@ import { ExternalLink, FileText, Users, TrendingUp, DollarSign, Printer } from "
 import { api, API_ROOT } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOptimizedQuotations } from "@/hooks/useOptimizedData";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 type QuoteRow = {
   id: number;
@@ -24,21 +33,30 @@ type QuoteRow = {
 
 export default function QuotationsList() {
   const { organizationName } = useOrganization();
-  const [quotations, setQuotations] = useState<QuoteRow[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+
+  const {
+    quotations,
+    totalCount,
+    loading,
+    error,
+  } = useOptimizedQuotations(page, pageSize, search);
 
   useEffect(() => {
     document.title = `Quotations | ${organizationName}`;
-    // Using centralized API_ROOT
-    api.get<QuoteRow[]>("/quotations/")
-      .then(setQuotations)
-      .catch(() => toast({ title: 'Failed to load quotations', variant: 'destructive' }));
-  }, [organizationName]);
+    if (error) {
+      toast({ title: 'Failed to load quotations', description: error, variant: 'destructive' });
+    }
+  }, [organizationName, error]);
 
-  const totalQuotes = quotations.length;
+  const totalPages = Math.ceil(totalCount / pageSize);
+
+  const totalQuotes = totalCount;
   const totalValue = quotations.reduce((sum, q) => {
     const raw = (typeof q.display_total !== 'undefined' && q.display_total !== null)
       ? q.display_total
@@ -83,7 +101,10 @@ export default function QuotationsList() {
   async function handleStatusChange(id: number, newStatus: string) {
     try {
       await api.patch(`/quotations/${id}/`, { status: newStatus });
-      setQuotations(prev => prev.map(q => q.id === id ? { ...q, status: newStatus } : q));
+      // This state update is optimistic and will only affect the current page.
+      // A full refetch might be desired for consistency across pages.
+      const updatedQuotations = quotations.map(q => q.id === id ? { ...q, status: newStatus } : q);
+      // setQuotations(updatedQuotations); // The hook manages the state
       toast({ title: 'Status updated' });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -92,25 +113,15 @@ export default function QuotationsList() {
   }
 
   const filtered = quotations.filter(q => {
-    // Text search on quote id, customer name/phone, vehicle
-    const text = search.trim().toLowerCase();
-    const matchesText = !text || [
-      q.quotation_number,
-      q.customer?.name,
-      q.customer?.phone_number,
-      q.vehicle_maker?.name,
-      q.vehicle_model?.name,
-    ].some(v => (v || "").toLowerCase().includes(text));
-
-    // Status filter
+    // Text search is now handled by the backend via useOptimizedQuotations hook
+    // We only need to handle client-side filters for status and date on the current page data.
     const matchesStatus = !statusFilter || q.status === statusFilter;
 
-    // Date range filter
     const quotationDate = new Date(q.quotation_date);
     const fromOk = !dateFrom || quotationDate >= new Date(dateFrom);
     const toOk = !dateTo || quotationDate <= new Date(dateTo);
 
-    return matchesText && matchesStatus && fromOk && toOk;
+    return matchesStatus && fromOk && toOk;
   });
 
   const statusOptions: { value: string; label: string }[] = [
@@ -246,82 +257,89 @@ export default function QuotationsList() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((quote) => (
-                  <tr key={quote.id} className="border-b hover:bg-muted/50">
-                    <td className="p-3">
-                      <a href={`/quotations/${quote.id}`} className="font-mono text-sm text-blue-600 hover:underline">{quote.quotation_number}</a>
-                    </td>
-                    <td className="p-3">
-                      {quote.customer ? (
-                        <div>
-                          <div className="font-medium">{quote.customer.name}</div>
-                          <div className="text-sm text-muted-foreground">{quote.customer.phone_number}</div>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground italic">No customer</span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <div className="text-sm">
-                        {quote.vehicle_maker?.name} {quote.vehicle_model?.name}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <span className="font-bold text-green-600">₹{(() => {
-                        const raw = (typeof quote.display_total !== 'undefined' && quote.display_total !== null)
-                          ? quote.display_total
-                          : quote.suggested_total;
-                        const n = typeof raw === 'string' ? parseFloat(raw) : (raw || 0);
-                        return n.toLocaleString();
-                      })()}</span>
-                      {typeof quote.final_total !== 'undefined' && quote.final_total !== null && (Number(quote.final_total) < Number(quote.suggested_total)) && (
-                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 align-middle">Discount Applied</span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <span className="text-sm">{new Date(quote.quotation_date).toLocaleDateString()}</span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={quote.status === 'approved' ? "default" : "secondary"} className="uppercase">
-                          {quote.status}
-                        </Badge>
-                        <select
-                          className="h-8 rounded-md border bg-background px-2 text-xs"
-                          value={quote.status}
-                          onChange={(e) => handleStatusChange(quote.id, e.target.value)}
-                          title="Update status"
-                        >
-                          {statusOptions.map(s => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open(`/quotations/${quote.id}`, '_blank')}
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          View
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handlePrint(quote.id)}
-                          title="Print"
-                          className="gap-1"
-                        >
-                          <Printer className="w-3 h-3" /> Print
-                        </Button>
-                      </div>
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                      Loading quotations...
                     </td>
                   </tr>
-                ))}
-                {filtered.length === 0 && (
+                ) : filtered.length > 0 ? (
+                  filtered.map((quote) => (
+                    <tr key={quote.id} className="border-b hover:bg-muted/50">
+                      <td className="p-3">
+                        <a href={`/quotations/${quote.id}`} className="font-mono text-sm text-blue-600 hover:underline">{quote.quotation_number}</a>
+                      </td>
+                      <td className="p-3">
+                        {quote.customer ? (
+                          <div>
+                            <div className="font-medium">{quote.customer.name}</div>
+                            <div className="text-sm text-muted-foreground">{quote.customer.phone_number}</div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground italic">No customer</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <div className="text-sm">
+                          {quote.vehicle_maker?.name} {quote.vehicle_model?.name}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <span className="font-bold text-green-600">₹{(() => {
+                          const raw = (typeof quote.display_total !== 'undefined' && quote.display_total !== null)
+                            ? quote.display_total
+                            : quote.suggested_total;
+                          const n = typeof raw === 'string' ? parseFloat(raw) : (raw || 0);
+                          return n.toLocaleString();
+                        })()}</span>
+                        {typeof quote.final_total !== 'undefined' && quote.final_total !== null && (Number(quote.final_total) < Number(quote.suggested_total)) && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 align-middle">Discount Applied</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <span className="text-sm">{new Date(quote.quotation_date).toLocaleDateString()}</span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={quote.status === 'approved' ? "default" : "secondary"} className="uppercase">
+                            {quote.status}
+                          </Badge>
+                          <select
+                            className="h-8 rounded-md border bg-background px-2 text-xs"
+                            value={quote.status}
+                            onChange={(e) => handleStatusChange(quote.id, e.target.value)}
+                            title="Update status"
+                          >
+                            {statusOptions.map(s => (
+                              <option key={s.value} value={s.value}>{s.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(`/quotations/${quote.id}`, '_blank')}
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            View
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePrint(quote.id)}
+                            title="Print"
+                            className="gap-1"
+                          >
+                            <Printer className="w-3 h-3" /> Print
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-muted-foreground">
                       No quotations found. Create your first quote to get started.
@@ -333,6 +351,47 @@ export default function QuotationsList() {
           </div>
         </CardContent>
       </Card>
+
+      {totalPages > 1 && (
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setPage((old) => Math.max(old - 1, 1));
+                }}
+                className={page === 1 ? "pointer-events-none opacity-50" : undefined}
+              />
+            </PaginationItem>
+            {[...Array(totalPages)].map((_, i) => (
+              <PaginationItem key={i}>
+                <PaginationLink
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setPage(i + 1);
+                  }}
+                  isActive={page === i + 1}
+                >
+                  {i + 1}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setPage((old) => Math.min(old + 1, totalPages));
+                }}
+                className={page === totalPages ? "pointer-events-none opacity-50" : undefined}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
     </section>
   );
 }

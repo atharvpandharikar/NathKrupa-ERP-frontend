@@ -5,7 +5,7 @@ const isProduction = window.location.hostname !== 'localhost' && window.location
 
 export const API_ROOT = (import.meta as any).env?.VITE_API_ROOT || (
   isProduction
-    ? "https://pg.nathkrupabody.com"  // Always use HTTPS in production
+    ? "https://pg.nathkrupabody.com"  // Production API endpoint
     : "http://127.0.0.1:8000"
 );
 

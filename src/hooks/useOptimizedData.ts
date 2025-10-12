@@ -23,6 +23,38 @@ function setCachedData<T>(key: string, data: T): void {
     dataCache.set(key, { data, timestamp: Date.now() });
 }
 
+interface FeaturePrice {
+    id: number;
+    vehicle_model: { id: number; name: string };
+    feature_category?: { id: number; name: string } | null;
+    feature_type?: { id: number; name: string; category: { id: number; name: string } } | null;
+    price: string;
+}
+
+interface VehicleModel {
+    id: number;
+    name: string;
+}
+
+interface FeatureCategory {
+    id: number;
+    name: string;
+}
+
+interface FeatureType {
+    id: number;
+    name: string;
+    category: { id: number; name: string };
+}
+
+interface FeatureImage {
+    id: number;
+    image: string;
+    alt_text?: string | null;
+    feature_price: number;
+}
+
+
 /**
  * Optimized hook for fetching feature categories
  * Reduces API calls by caching and batching requests
@@ -149,6 +181,395 @@ export function useOptimizedQuotations(page = 1, pageSize = 20, searchTerm = '')
 
     return { quotations, totalCount, loading, error };
 }
+
+/**
+ * Optimized hook for fetching work orders with pagination
+ */
+export function useOptimizedWorkOrders(page = 1, pageSize = 20, searchTerm = '') {
+    const [workOrders, setWorkOrders] = useState<any[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchWorkOrders = async () => {
+            setLoading(true);
+            try {
+                const searchParam = searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : '';
+                const response = await api.get<any>(
+                    `/work-orders/?page=${page}&page_size=${pageSize}${searchParam}`
+                );
+
+                setWorkOrders(response.results || response);
+                setTotalCount(response.count || response.length);
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchWorkOrders();
+    }, [page, pageSize, searchTerm]);
+
+    return { workOrders, totalCount, loading, error };
+}
+
+/**
+ * Optimized hook for fetching all data for the Feature Prices page with caching.
+ */
+export function useOptimizedAllFeatureData() {
+    const [data, setData] = useState<{
+        prices: FeaturePrice[];
+        models: VehicleModel[];
+        categories: FeatureCategory[];
+        types: FeatureType[];
+        images: FeatureImage[];
+    }>({
+        prices: [],
+        models: [],
+        categories: [],
+        types: [],
+        images: [],
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchAllData = async () => {
+            setLoading(true);
+            const cacheKeys = {
+                prices: 'feature-prices-all',
+                models: 'vehicle-models-all',
+                categories: 'feature-categories-all',
+                types: 'feature-types-all',
+                images: 'feature-images-all',
+            };
+
+            try {
+                // Check cache first
+                const cachedPrices = getCachedData<FeaturePrice[]>(cacheKeys.prices);
+                const cachedModels = getCachedData<VehicleModel[]>(cacheKeys.models);
+                const cachedCategories = getCachedData<FeatureCategory[]>(cacheKeys.categories);
+                const cachedTypes = getCachedData<FeatureType[]>(cacheKeys.types);
+                const cachedImages = getCachedData<FeatureImage[]>(cacheKeys.images);
+
+                if (cachedPrices && cachedModels && cachedCategories && cachedTypes && cachedImages) {
+                    setData({
+                        prices: cachedPrices,
+                        models: cachedModels,
+                        categories: cachedCategories,
+                        types: cachedTypes,
+                        images: cachedImages,
+                    });
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch from API
+                const [prices, models, categories, types, images] = await Promise.all([
+                    api.get<FeaturePrice[]>('/feature-prices/'),
+                    api.get<VehicleModel[]>('/vehicle-models/'),
+                    api.get<FeatureCategory[]>('/feature-categories/'),
+                    api.get<FeatureType[]>('/feature-types/'),
+                    api.get<FeatureImage[]>('/feature-images/'),
+                ]);
+
+                // Set cache
+                setCachedData(cacheKeys.prices, prices);
+                setCachedData(cacheKeys.models, models);
+                setCachedData(cacheKeys.categories, categories);
+                setCachedData(cacheKeys.types, types);
+                setCachedData(cacheKeys.images, images);
+
+                setData({ prices, models, categories, types, images });
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchAllData();
+    }, []);
+
+    return { ...data, loading, error };
+}
+
+/**
+ * Optimized hook for fetching all data for the Feature Categories page with caching.
+ */
+export function useOptimizedFeatureCategoriesPageData() {
+    const [data, setData] = useState<{
+        categories: FeatureCategory[];
+        vehicleTypes: any[];
+    }>({
+        categories: [],
+        vehicleTypes: [],
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchPageData = async () => {
+            setLoading(true);
+            const cacheKeys = {
+                categories: 'feature-categories-all',
+                vehicleTypes: 'vehicle-types-all',
+            };
+
+            try {
+                // Check cache first
+                const cachedCategories = getCachedData<FeatureCategory[]>(cacheKeys.categories);
+                const cachedVehicleTypes = getCachedData<any[]>(cacheKeys.vehicleTypes);
+
+                if (cachedCategories && cachedVehicleTypes) {
+                    setData({
+                        categories: cachedCategories,
+                        vehicleTypes: cachedVehicleTypes,
+                    });
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch from API
+                const [categories, vehicleTypes] = await Promise.all([
+                    api.get<FeatureCategory[]>('/feature-categories/'),
+                    api.get<any[]>('/vehicle-types/'),
+                ]);
+
+                // Set cache
+                setCachedData(cacheKeys.categories, categories);
+                setCachedData(cacheKeys.vehicleTypes, vehicleTypes);
+
+                setData({ categories, vehicleTypes });
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchPageData();
+    }, []);
+
+    return { ...data, loading, error };
+}
+
+
+/**
+ * Optimized hook for fetching all data for the Feature Types page with caching.
+ */
+export function useOptimizedFeatureTypesPageData() {
+    const [data, setData] = useState<{
+        types: FeatureType[];
+        categories: FeatureCategory[];
+        models: VehicleModel[];
+    }>({
+        types: [],
+        categories: [],
+        models: [],
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchPageData = async () => {
+            setLoading(true);
+            const cacheKeys = {
+                types: 'feature-types-all',
+                categories: 'feature-categories-all',
+                models: 'vehicle-models-all',
+            };
+
+            try {
+                // Check cache first
+                const cachedTypes = getCachedData<FeatureType[]>(cacheKeys.types);
+                const cachedCategories = getCachedData<FeatureCategory[]>(cacheKeys.categories);
+                const cachedModels = getCachedData<VehicleModel[]>(cacheKeys.models);
+
+                if (cachedTypes && cachedCategories && cachedModels) {
+                    setData({
+                        types: cachedTypes,
+                        categories: cachedCategories,
+                        models: cachedModels,
+                    });
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch from API
+                const [types, categories, models] = await Promise.all([
+                    api.get<FeatureType[]>('/feature-types/'),
+                    api.get<FeatureCategory[]>('/feature-categories/'),
+                    api.get<VehicleModel[]>('/vehicle-models/'),
+                ]);
+
+                // Set cache
+                setCachedData(cacheKeys.types, types);
+                setCachedData(cacheKeys.categories, categories);
+                setCachedData(cacheKeys.models, models);
+
+                setData({ types, categories, models });
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchPageData();
+    }, []);
+
+    return { ...data, loading, error };
+}
+
+
+/**
+ * Optimized hook for fetching vehicle types with caching.
+ */
+export function useOptimizedVehicleTypes() {
+    const [vehicleTypes, setVehicleTypes] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchVehicleTypes = async () => {
+            setLoading(true);
+            const cacheKey = 'vehicle-types-all';
+
+            try {
+                // Check cache first
+                const cachedData = getCachedData<any[]>(cacheKey);
+                if (cachedData) {
+                    setVehicleTypes(cachedData);
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch from API
+                const response = await api.get<any[]>('/vehicle-types/');
+                setCachedData(cacheKey, response);
+                setVehicleTypes(response);
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchVehicleTypes();
+    }, []);
+
+    return { vehicleTypes, loading, error };
+}
+
+/**
+ * Optimized hook for fetching vehicle makers with caching.
+ */
+export function useOptimizedVehicleMakers() {
+    const [vehicleMakers, setVehicleMakers] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchVehicleMakers = async () => {
+            setLoading(true);
+            const cacheKey = 'vehicle-makers-all';
+
+            try {
+                // Check cache first
+                const cachedData = getCachedData<any[]>(cacheKey);
+                if (cachedData) {
+                    setVehicleMakers(cachedData);
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch from API
+                const response = await api.get<any[]>('/vehicle-makers/');
+                setCachedData(cacheKey, response);
+                setVehicleMakers(response);
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchVehicleMakers();
+    }, []);
+
+    return { vehicleMakers, loading, error };
+}
+
+/**
+ * Optimized hook for fetching all data for the Vehicle Models page with caching.
+ */
+export function useOptimizedVehicleModelsPageData() {
+    const [data, setData] = useState<{
+        models: VehicleModel[];
+        makers: any[];
+        types: any[];
+    }>({
+        models: [],
+        makers: [],
+        types: [],
+    });
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchPageData = async () => {
+            setLoading(true);
+            const cacheKeys = {
+                models: 'vehicle-models-all',
+                makers: 'vehicle-makers-all',
+                types: 'vehicle-types-all',
+            };
+
+            try {
+                // Check cache first
+                const cachedModels = getCachedData<VehicleModel[]>(cacheKeys.models);
+                const cachedMakers = getCachedData<any[]>(cacheKeys.makers);
+                const cachedTypes = getCachedData<any[]>(cacheKeys.types);
+
+                if (cachedModels && cachedMakers && cachedTypes) {
+                    setData({
+                        models: cachedModels,
+                        makers: cachedMakers,
+                        types: cachedTypes,
+                    });
+                    setLoading(false);
+                    return;
+                }
+
+                // Fetch from API
+                const [models, makers, types] = await Promise.all([
+                    api.get<VehicleModel[]>('/vehicle-models/'),
+                    api.get<any[]>('/vehicle-makers/'),
+                    api.get<any[]>('/vehicle-types/'),
+                ]);
+
+                // Set cache
+                setCachedData(cacheKeys.models, models);
+                setCachedData(cacheKeys.makers, makers);
+                setCachedData(cacheKeys.types, types);
+
+                setData({ models, makers, types });
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchPageData();
+    }, []);
+
+    return { ...data, loading, error };
+}
+
 
 /**
  * Optimized hook for fetching bills with pagination and minimal data

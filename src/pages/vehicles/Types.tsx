@@ -6,11 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOptimizedVehicleTypes } from "@/hooks/useOptimizedData";
+
 interface VehicleType { id: number; code: string; name: string; description?: string | null }
 
 export default function VehicleTypesPage() {
   const { organizationName } = useOrganization();
-  const [items, setItems] = useState<VehicleType[]>([]);
+  const {
+    vehicleTypes: items,
+    loading,
+    error,
+  } = useOptimizedVehicleTypes();
+
+  const [itemsState, setItems] = useState<VehicleType[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -20,15 +28,45 @@ export default function VehicleTypesPage() {
 
   useEffect(() => {
     document.title = `Vehicle Types  | ${organizationName}`;
-    api.get<VehicleType[]>("/vehicle-types/")
-      .then(setItems)
-      .catch(() => toast({ title: "Failed to load vehicle types", variant: "destructive" }));
-  }, [organizationName]);
+    if (error) {
+      toast({ title: "Failed to load vehicle types", variant: "destructive" });
+    }
+  }, [organizationName, error]);
+
+  useEffect(() => {
+    if (items) {
+      setItems(items);
+    }
+  }, [items]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return items.filter(i => i.name.toLowerCase().includes(q) || i.code.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
-  }, [items, query]);
+    return itemsState.filter(i => i.name.toLowerCase().includes(q) || i.code.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
+  }, [itemsState, query]);
+
+  if (loading) {
+    return (
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">Vehicle Types</h1>
+            <p className="text-sm text-muted-foreground">Manage high-level vehicle type buckets</p>
+          </div>
+          <Button disabled>Add Vehicle Type</Button>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Vehicle Types...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center p-8 text-muted-foreground">
+              Please wait while we load the data.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">

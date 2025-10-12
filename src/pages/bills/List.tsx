@@ -337,20 +337,20 @@ export default function BillsList() {
                 <Card className="p-3">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs font-medium text-muted-foreground">Total Bills</p>
-                            <p className="text-xl font-semibold">
+                            <div className="text-xs font-medium text-muted-foreground">Total Bills</div>
+                            <div className="text-xl font-semibold">
                                 {listQuery.isLoading ? <Skeleton className="h-6 w-10" /> : stats.total}
-                            </p>
+                            </div>
                         </div>
                     </div>
                 </Card>
                 <Card className="p-3">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs font-medium text-muted-foreground">Total Value (₹)</p>
-                            <p className="text-xl font-semibold">
+                            <div className="text-xs font-medium text-muted-foreground">Total Value (₹)</div>
+                            <div className="text-xl font-semibold">
                                 {stats.totalValue.toLocaleString('en-IN')}
-                            </p>
+                            </div>
                         </div>
                     </div>
                 </Card>

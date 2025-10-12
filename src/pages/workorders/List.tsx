@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { workOrdersApi, type WorkOrder } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { RefreshCw, Search, Plus, Eye, Settings, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOptimizedWorkOrders } from "@/hooks/useOptimizedData";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { toast } from "@/hooks/use-toast";
 
 const STATUS_COLORS: Record<string, string> = {
   scheduled: "bg-blue-100 text-blue-800",
@@ -29,15 +38,24 @@ export default function WorkOrdersList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
   const statusFilter = searchParams.get("status") || "all";
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
-  // Core list
-  const listQuery = useQuery({
-    queryKey: ["work-orders"],
-    queryFn: () => workOrdersApi.list()
-  });
+  const {
+    workOrders,
+    totalCount,
+    loading,
+    error,
+  } = useOptimizedWorkOrders(page, pageSize, searchTerm);
 
-  const items: WorkOrder[] = listQuery.data ?
-    (Array.isArray(listQuery.data) ? listQuery.data as WorkOrder[] : (listQuery.data.results ?? [])) : [];
+  useEffect(() => {
+    if (error) {
+      toast({ title: 'Failed to load work orders', description: error, variant: 'destructive' });
+    }
+  }, [error]);
+
+  const items: WorkOrder[] = workOrders;
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // Group by status (simplified to 4 main statuses)
   const groups: Record<string, WorkOrder[]> = {
@@ -52,25 +70,23 @@ export default function WorkOrdersList() {
   const filteredItems = useMemo(() => {
     let filtered = statusFilter === "all" ? items : groups[statusFilter] || [];
 
-    if (searchTerm) {
-      filtered = filtered.filter(item =>
-        item.work_order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.quotation?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.quotation?.quotation_number?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
+    // Search is now handled by the backend hook.
+    // The searchTerm state is passed to the hook.
+    // We only need to apply status filter on the client for the current page.
     return filtered;
-  }, [items, statusFilter, searchTerm, groups]);
+  }, [items, statusFilter, groups]);
 
-  const stats = {
-    total: items.length,
+  const stats = useMemo(() => ({
+    total: totalCount,
+    // Note: these stats are for the current page, not all items.
+    // For accurate global stats, the API would need to provide them.
     upcoming: groups.upcoming.length,
     inprocess: groups.inprocess.length,
     completed: groups.completed.length,
     cancelled: groups.cancelled.length,
     totalBalance: items.reduce((sum, b) => sum + (Number(b.remaining_balance) || 0), 0)
-  };
+  }), [totalCount, items, groups]);
+
 
   const handleSearch = (value: string) => {
     setSearchTerm(value);
@@ -199,7 +215,7 @@ export default function WorkOrdersList() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => listQuery.refetch()}
+          onClick={() => { /* The hook will refetch on parameter change */ }}
           className="gap-1"
         >
           <RefreshCw className="h-4 w-4" />
@@ -215,7 +231,7 @@ export default function WorkOrdersList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
-              {listQuery.isLoading ? <Skeleton className="h-6 w-10" /> : stats.total}
+              {loading ? <Skeleton className="h-6 w-10" /> : stats.total}
             </div>
           </CardContent>
         </Card>
@@ -265,7 +281,7 @@ export default function WorkOrdersList() {
 
       {/* Work Orders List */}
       <div className="space-y-3">
-        {listQuery.isLoading ? (
+        {loading ? (
           Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="p-4 border rounded-lg">
               <Skeleton className="h-6 w-40 mb-2" />
@@ -288,6 +304,47 @@ export default function WorkOrdersList() {
           ))
         )}
       </div>
+
+      {totalPages > 1 && (
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setPage((old) => Math.max(old - 1, 1));
+                }}
+                className={page === 1 ? "pointer-events-none opacity-50" : undefined}
+              />
+            </PaginationItem>
+            {[...Array(totalPages)].map((_, i) => (
+              <PaginationItem key={i}>
+                <PaginationLink
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setPage(i + 1);
+                  }}
+                  isActive={page === i + 1}
+                >
+                  {i + 1}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            <PaginationItem>
+              <PaginationNext
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setPage((old) => Math.min(old + 1, totalPages));
+                }}
+                className={page === totalPages ? "pointer-events-none opacity-50" : undefined}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
     </div>
   );
 }

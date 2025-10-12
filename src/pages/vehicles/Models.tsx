@@ -7,37 +7,71 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { toast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOptimizedVehicleModelsPageData } from "@/hooks/useOptimizedData";
+
 interface VehicleType { id: number; name: string; }
 interface VehicleMaker { id: number; name: string; }
 interface VehicleModel { id: number; name: string; description?: string | null; maker: VehicleMaker; vehicle_type: VehicleType }
 
 export default function VehicleModelsPage() {
   const { organizationName } = useOrganization();
-  const [items, setItems] = useState<VehicleModel[]>([]);
+  const {
+    models: items,
+    makers,
+    types,
+    loading,
+    error,
+  } = useOptimizedVehicleModelsPageData();
+
+  const [itemsState, setItems] = useState<VehicleModel[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<VehicleModel | null>(null);
   const [formErrors, setFormErrors] = useState<{ name?: string; maker_id?: string; vehicle_type_id?: string; form?: string }>({});
-  const [makers, setMakers] = useState<VehicleMaker[]>([]);
-  const [types, setTypes] = useState<VehicleType[]>([]);
   const [form, setForm] = useState<{ name: string; description?: string; maker_id: number | ""; vehicle_type_id: number | "" }>({ name: "", description: "", maker_id: "", vehicle_type_id: "" });
 
   useEffect(() => {
     document.title = `Vehicle Models  | ${organizationName}`;
-    Promise.all([
-      api.get<VehicleModel[]>("/vehicle-models/"),
-      api.get<VehicleMaker[]>("/vehicle-makers/"),
-      api.get<VehicleType[]>("/vehicle-types/"),
-    ])
-    .then(([vms, mks, vts]) => { setItems(vms); setMakers(mks); setTypes(vts); })
-    .catch(() => toast({ title: "Failed to load models", variant: "destructive" }));
-  }, [organizationName]);
+    if (error) {
+      toast({ title: "Failed to load models", variant: "destructive" });
+    }
+  }, [organizationName, error]);
+
+  useEffect(() => {
+    if (items) {
+      setItems(items);
+    }
+  }, [items]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return items.filter(i => i.name.toLowerCase().includes(q) || i.maker?.name?.toLowerCase().includes(q) || i.vehicle_type?.name?.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
-  }, [items, query]);
+    return itemsState.filter(i => i.name.toLowerCase().includes(q) || i.maker?.name?.toLowerCase().includes(q) || i.vehicle_type?.name?.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
+  }, [itemsState, query]);
+
+  if (loading) {
+    return (
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">Vehicle Models</h1>
+            <p className="text-sm text-muted-foreground">Manage models by maker and vehicle type</p>
+          </div>
+          <Button disabled>Add Model</Button>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Models...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center p-8 text-muted-foreground">
+              Please wait while we load the data.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">

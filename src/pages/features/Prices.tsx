@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { toast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOptimizedAllFeatureData } from "@/hooks/useOptimizedData";
+
 // API_ROOT from central helper; HTTPS in production
 function fullImageUrl(path: string) {
   if (!path) return "";
@@ -25,11 +27,18 @@ interface FeatureImage { id: number; image: string; alt_text?: string | null; fe
 
 export default function FeaturePricesPage() {
   const { organizationName } = useOrganization();
-  const [items, setItems] = useState<FeaturePrice[]>([]);
+  const {
+    prices: items,
+    models,
+    categories,
+    types,
+    images,
+    loading,
+    error,
+  } = useOptimizedAllFeatureData();
+
+  const [itemsState, setItems] = useState<FeaturePrice[]>([]);
   const [query, setQuery] = useState("");
-  const [models, setModels] = useState<VehicleModel[]>([]);
-  const [categories, setCategories] = useState<FeatureCategory[]>([]);
-  const [types, setTypes] = useState<FeatureType[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<FeaturePrice | null>(null);
   const [form, setForm] = useState<{ vehicle_model_id: number | ""; feature_category_id: number | ""; feature_type_id: number | ""; price: string }>(
@@ -43,8 +52,6 @@ export default function FeaturePricesPage() {
   const [uploadAlt, setUploadAlt] = useState<string>("");
   // Per-row primary image preview
   const [primaryById, setPrimaryById] = useState<Record<number, FeatureImage | null>>({});
-  const [loadingPrimary, setLoadingPrimary] = useState<Record<number, boolean>>({});
-  // Consolidated details dialog
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsItem, setDetailsItem] = useState<FeaturePrice | null>(null);
   const [detailsImages, setDetailsImages] = useState<FeatureImage[] | null>(null);
@@ -60,34 +67,38 @@ export default function FeaturePricesPage() {
 
   useEffect(() => {
     document.title = `Feature Prices  | ${organizationName}`;
-    Promise.all([
-      api.get<FeaturePrice[]>("/feature-prices/"),
-      api.get<VehicleModel[]>("/vehicle-models/"),
-      api.get<FeatureCategory[]>("/feature-categories/"),
-      api.get<FeatureType[]>("/feature-types/"),
-    ])
-      .then(async ([fps, vms, cats, fts]) => {
-        setItems(fps); setModels(vms); setCategories(cats); setTypes(fts);
-        // Prefetch a primary image for each row
-        await Promise.all(fps.map(async (fp) => {
-          const id = fp.id;
-          try {
-            setLoadingPrimary(prev => ({ ...prev, [id]: true }));
-            const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${id}`);
-            setPrimaryById(prev => ({ ...prev, [id]: imgs[0] || null }));
-          } catch {
-            // ignore
-          } finally {
-            setLoadingPrimary(prev => ({ ...prev, [id]: false }));
-          }
-        }));
-      })
-      .catch(console.error);
-  }, [organizationName]);
+    if (error) {
+      toast({ title: "Failed to load data", description: error, variant: "destructive" });
+    }
+  }, [organizationName, error]);
+
+  useEffect(() => {
+    if (items) {
+      setItems(items as FeaturePrice[]);
+    }
+  }, [items]);
+
+  useEffect(() => {
+    if (images && items) {
+      const primaryImages: Record<number, FeatureImage | null> = {};
+      const imagesByPriceId: Record<number, FeatureImage[]> = (images as FeatureImage[]).reduce((acc, img) => {
+        if (!acc[img.feature_price]) {
+          acc[img.feature_price] = [];
+        }
+        acc[img.feature_price].push(img);
+        return acc;
+      }, {} as Record<number, FeatureImage[]>);
+
+      (items as FeaturePrice[]).forEach(fp => {
+        primaryImages[fp.id] = (imagesByPriceId[fp.id] && imagesByPriceId[fp.id][0]) || null;
+      });
+      setPrimaryById(primaryImages);
+    }
+  }, [images, items]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return items.filter(i => {
+    return itemsState.filter(i => {
       const matchQ = (
         i.vehicle_model?.name?.toLowerCase().includes(q) ||
         i.feature_category?.name?.toLowerCase().includes(q) ||
@@ -96,7 +107,31 @@ export default function FeaturePricesPage() {
       const matchCat = categoryFilter ? i.feature_category?.id === categoryFilter : true;
       return matchQ && matchCat;
     });
-  }, [items, query, categoryFilter]);
+  }, [itemsState, query, categoryFilter]);
+
+  if (loading) {
+    return (
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">Feature Prices</h1>
+            <p className="text-sm text-muted-foreground">Set price per vehicle for category or type</p>
+          </div>
+          <Button disabled>Add Feature Price</Button>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Feature Prices...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center p-8 text-muted-foreground">
+              Please wait while we load the data.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">
@@ -120,7 +155,7 @@ export default function FeaturePricesPage() {
                 <Combobox
                   value={form.vehicle_model_id ? String(form.vehicle_model_id) : ""}
                   onChange={(val) => setForm(f => ({ ...f, vehicle_model_id: val ? Number(val) : "" }))}
-                  options={models.map(m => ({ label: m.name, value: String(m.id) }))}
+                  options={(models as VehicleModel[]).map(m => ({ label: m.name, value: String(m.id) }))}
                   placeholder="Select model"
                   searchPlaceholder="Search models..."
                 />
@@ -132,7 +167,7 @@ export default function FeaturePricesPage() {
                   <Combobox
                     value={form.feature_category_id ? String(form.feature_category_id) : ""}
                     onChange={(val) => { setForm(f => ({ ...f, feature_category_id: val ? Number(val) : "", feature_type_id: "" })); }}
-                    options={categories.map(c => ({ label: c.name, value: String(c.id) }))}
+                    options={(categories as FeatureCategory[]).map(c => ({ label: c.name, value: String(c.id) }))}
                     placeholder="Select category"
                     searchPlaceholder="Search categories..."
                   />
@@ -298,7 +333,7 @@ export default function FeaturePricesPage() {
               <Combobox
                 value={categoryFilter ? String(categoryFilter) : ""}
                 onChange={(val) => setCategoryFilter(val ? Number(val) : "")}
-                options={categories.map(c => ({ label: c.name, value: String(c.id) }))}
+                options={(categories as FeatureCategory[]).map(c => ({ label: c.name, value: String(c.id) }))}
                 placeholder="All categories"
                 searchPlaceholder="Search categories..."
               />
@@ -327,7 +362,7 @@ export default function FeaturePricesPage() {
                         {primaryById[fp.id] ? (
                           <img src={fullImageUrl(primaryById[fp.id]!.image)} alt={primaryById[fp.id]!.alt_text || ''} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="text-xs text-muted-foreground">{loadingPrimary[fp.id] ? 'Loading…' : 'No image'}</div>
+                          <div className="text-xs text-muted-foreground">{loading ? 'Loading…' : 'No image'}</div>
                         )}
                       </div>
                     </td>

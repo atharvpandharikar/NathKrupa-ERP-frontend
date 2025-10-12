@@ -6,11 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOptimizedVehicleMakers } from "@/hooks/useOptimizedData";
+
 interface VehicleMaker { id: number; name: string; description?: string | null }
 
 export default function VehicleMakersPage() {
   const { organizationName } = useOrganization();
-  const [items, setItems] = useState<VehicleMaker[]>([]);
+  const {
+    vehicleMakers: items,
+    loading,
+    error,
+  } = useOptimizedVehicleMakers();
+
+  const [itemsState, setItems] = useState<VehicleMaker[]>([]);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -20,15 +28,45 @@ export default function VehicleMakersPage() {
 
   useEffect(() => {
     document.title = `Vehicle Makers  | ${organizationName}`;
-    api.get<VehicleMaker[]>("/vehicle-makers/")
-      .then(setItems)
-      .catch(() => toast({ title: "Failed to load makers", variant: "destructive" }));
-  }, [organizationName]);
+    if (error) {
+      toast({ title: "Failed to load makers", variant: "destructive" });
+    }
+  }, [organizationName, error]);
+
+  useEffect(() => {
+    if (items) {
+      setItems(items);
+    }
+  }, [items]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return items.filter(i => i.name.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
-  }, [items, query]);
+    return itemsState.filter(i => i.name.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q));
+  }, [itemsState, query]);
+
+  if (loading) {
+    return (
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">Vehicle Makers</h1>
+            <p className="text-sm text-muted-foreground">Manage vehicle manufacturers</p>
+          </div>
+          <Button disabled>Add Maker</Button>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Makers...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center p-8 text-muted-foreground">
+              Please wait while we load the data.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">

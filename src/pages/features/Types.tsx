@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { toast } from "@/hooks/use-toast";
 import { Combobox } from "@/components/ui/combobox";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useOptimizedFeatureTypesPageData } from "@/hooks/useOptimizedData";
+
 interface VehicleMaker { id: number; name: string }
 
 interface VehicleModel { id: number; name: string; }
@@ -16,10 +18,16 @@ interface FeatureType { id: number; name: string; category: FeatureCategory; veh
 
 export default function FeatureTypesPage() {
   const { organizationName } = useOrganization();
-  const [items, setItems] = useState<FeatureType[]>([]);
+  const {
+    types: items,
+    categories,
+    models,
+    loading,
+    error,
+  } = useOptimizedFeatureTypesPageData();
+
+  const [itemsState, setItems] = useState<FeatureType[]>([]);
   const [query, setQuery] = useState("");
-  const [categories, setCategories] = useState<FeatureCategory[]>([]);
-  const [models, setModels] = useState<VehicleModel[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
   const [formErrors, setFormErrors] = useState<{ name?: string; category_id?: string; form?: string }>({});
@@ -30,18 +38,20 @@ export default function FeatureTypesPage() {
 
   useEffect(() => {
     document.title = `Feature Types  | ${organizationName}`;
-    Promise.all([
-      api.get<FeatureType[]>("/feature-types/"),
-      api.get<FeatureCategory[]>("/feature-categories/"),
-      api.get<VehicleModel[]>("/vehicle-models/"),
-    ])
-  .then(([fts, cats, vms]) => { setItems(fts); setCategories(cats); setModels(vms); })
-  .catch(() => toast({ title: "Failed to load data", description: "Please refresh the page or try again later.", variant: "destructive" }));
-  }, [organizationName]);
+    if (error) {
+      toast({ title: "Failed to load data", description: "Please refresh the page or try again later.", variant: "destructive" });
+    }
+  }, [organizationName, error]);
+
+  useEffect(() => {
+    if (items) {
+      setItems(items);
+    }
+  }, [items]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return items.filter(i => {
+    return itemsState.filter(i => {
       const matchesCategory = categoryFilter ? i.category?.id === categoryFilter : true;
       const matchesQuery = (
         i.name.toLowerCase().includes(q) ||
@@ -50,7 +60,31 @@ export default function FeatureTypesPage() {
       );
       return matchesCategory && matchesQuery;
     });
-  }, [items, query, categoryFilter]);
+  }, [itemsState, query, categoryFilter]);
+
+  if (loading) {
+    return (
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold mb-1">Feature Types</h1>
+            <p className="text-sm text-muted-foreground">Manage reusable feature types per vehicle model</p>
+          </div>
+          <Button disabled>Add Feature Type</Button>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Loading Feature Types...</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center p-8 text-muted-foreground">
+              Please wait while we load the data.
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">
@@ -130,7 +164,7 @@ export default function FeatureTypesPage() {
                   setOpen(false);
                 } catch (e: any) {
                   let msg = e?.message || 'Save failed';
-                  try { const parsed = JSON.parse(msg); msg = JSON.stringify(parsed); } catch {}
+                  try { const parsed = JSON.parse(msg); msg = JSON.stringify(parsed); } catch { }
                   setFormErrors({ form: msg });
                   toast({ title: 'Failed to save', variant: 'destructive' });
                 } finally {
@@ -164,12 +198,12 @@ export default function FeatureTypesPage() {
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
-        <thead>
+              <thead>
                 <tr className="border-b">
                   <th className="text-left p-3 font-medium">Feature Type</th>
                   <th className="text-left p-3 font-medium">Category</th>
                   <th className="text-left p-3 font-medium">Vehicle Models</th>
-          <th className="text-right p-3 font-medium">Actions</th>
+                  <th className="text-right p-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
