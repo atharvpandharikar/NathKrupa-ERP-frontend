@@ -152,21 +152,21 @@ export default function UserAdminDashboard() {
     ];
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full max-w-full">
             {/* Header */}
-            <div className="mb-8">
-                <div className="flex items-center justify-between">
+            <div className="mb-6">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-4xl font-bold text-gray-900 mb-2">
+                        <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2">
                             Shop Admin Dashboard
                         </h1>
-                        <p className="text-xl text-gray-600">
+                        <p className="text-base md:text-lg lg:text-xl text-muted-foreground">
                             Manage your e-commerce operations
                         </p>
                     </div>
                     <div className="flex items-center gap-4">
-                        <Badge variant="outline" className="px-4 py-2">
-                            <TrendingUpIcon className="w-4 h-4 mr-2" />
+                        <Badge variant="outline" className="px-3 py-1.5 md:px-4 md:py-2">
+                            <TrendingUpIcon className="w-3 h-3 md:w-4 md:h-4 mr-2" />
                             Live Dashboard
                         </Badge>
                     </div>
@@ -174,66 +174,66 @@ export default function UserAdminDashboard() {
             </div>
 
             {/* Stats Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
                 <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
                     <CardHeader className="pb-2">
-                        <CardDescription className="text-blue-700">Total Revenue</CardDescription>
-                        <CardTitle className="text-3xl font-bold text-blue-900">₹12,53,430</CardTitle>
+                        <CardDescription className="text-blue-700 text-xs md:text-sm">Total Revenue</CardDescription>
+                        <CardTitle className="text-xl md:text-2xl lg:text-3xl font-bold text-blue-900">₹12,53,430</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
-                            <TrendingUpIcon className="w-4 h-4 text-green-600" />
-                            <span className="text-sm text-green-600 font-medium">+12.5%</span>
-                            <span className="text-sm text-gray-600">from last month</span>
+                            <TrendingUpIcon className="w-3 h-3 md:w-4 md:h-4 text-green-600" />
+                            <span className="text-xs md:text-sm text-green-600 font-medium">+12.5%</span>
+                            <span className="text-xs md:text-sm text-muted-foreground">from last month</span>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
                     <CardHeader className="pb-2">
-                        <CardDescription className="text-green-700">Total Orders</CardDescription>
-                        <CardTitle className="text-3xl font-bold text-green-900">1,234</CardTitle>
+                        <CardDescription className="text-green-700 text-xs md:text-sm">Total Orders</CardDescription>
+                        <CardTitle className="text-xl md:text-2xl lg:text-3xl font-bold text-green-900">1,234</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
-                            <TrendingUpIcon className="w-4 h-4 text-green-600" />
-                            <span className="text-sm text-green-600 font-medium">+8.3%</span>
-                            <span className="text-sm text-gray-600">from last month</span>
+                            <TrendingUpIcon className="w-3 h-3 md:w-4 md:h-4 text-green-600" />
+                            <span className="text-xs md:text-sm text-green-600 font-medium">+8.3%</span>
+                            <span className="text-xs md:text-sm text-muted-foreground">from last month</span>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
                     <CardHeader className="pb-2">
-                        <CardDescription className="text-purple-700">Active Products</CardDescription>
-                        <CardTitle className="text-3xl font-bold text-purple-900">2,890</CardTitle>
+                        <CardDescription className="text-purple-700 text-xs md:text-sm">Active Products</CardDescription>
+                        <CardTitle className="text-xl md:text-2xl lg:text-3xl font-bold text-purple-900">2,890</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
-                            <TrendingUpIcon className="w-4 h-4 text-green-600" />
-                            <span className="text-sm text-green-600 font-medium">+5.2%</span>
-                            <span className="text-sm text-gray-600">from last month</span>
+                            <TrendingUpIcon className="w-3 h-3 md:w-4 md:h-4 text-green-600" />
+                            <span className="text-xs md:text-sm text-green-600 font-medium">+5.2%</span>
+                            <span className="text-xs md:text-sm text-muted-foreground">from last month</span>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
                     <CardHeader className="pb-2">
-                        <CardDescription className="text-orange-700">Customer Rating</CardDescription>
-                        <CardTitle className="text-3xl font-bold text-orange-900">4.8</CardTitle>
+                        <CardDescription className="text-orange-700 text-xs md:text-sm">Customer Rating</CardDescription>
+                        <CardTitle className="text-xl md:text-2xl lg:text-3xl font-bold text-orange-900">4.8</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2">
-                            <TrendingUpIcon className="w-4 h-4 text-green-600" />
-                            <span className="text-sm text-green-600 font-medium">+0.3</span>
-                            <span className="text-sm text-gray-600">from last month</span>
+                            <TrendingUpIcon className="w-3 h-3 md:w-4 md:h-4 text-green-600" />
+                            <span className="text-xs md:text-sm text-green-600 font-medium">+0.3</span>
+                            <span className="text-xs md:text-sm text-muted-foreground">from last month</span>
                         </div>
                     </CardContent>
                 </Card>
             </div>
 
             {/* Admin Sections Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
                 {adminSections.map((section) => {
                     const IconComponent = section.icon;
                     return (
@@ -278,9 +278,9 @@ export default function UserAdminDashboard() {
             </div>
 
             {/* Quick Actions */}
-            <div className="mt-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Quick Actions</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="mt-6">
+                <h2 className="text-xl md:text-2xl font-bold mb-4">Quick Actions</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                     <Card
                         className="cursor-pointer hover:shadow-lg transition-shadow"
                         onClick={() => handleNavigation('/user-admin/products/add')}

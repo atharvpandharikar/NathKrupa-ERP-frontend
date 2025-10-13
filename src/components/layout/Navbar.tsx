@@ -30,11 +30,29 @@ export function Navbar() {
       settings: 'Settings',
       features: 'Features',
       reports: 'Reports',
-      vehicles: 'Vehicles'
+      vehicles: 'Vehicles',
+      'user-admin': 'Shop Admin',
+      products: 'Products',
+      categories: 'Categories',
+      orders: 'Orders',
+      brands: 'Brands',
+      tags: 'Tags',
+      'car-makers': 'Car Makers',
+      'car-models': 'Car Models',
+      'car-variants': 'Car Variants',
+      'vehicle-compatibility': 'Vehicle Compatibility',
+      addresses: 'Addresses',
+      reviews: 'Reviews',
+      wishlists: 'Wishlists',
+      seo: 'SEO Entries',
+      'garage-vehicles': 'Garage Vehicles',
+      add: 'Add',
+      edit: 'Edit',
+      view: 'View'
     };
     return segments.map((seg, i) => {
       if (/^\d+$/.test(seg)) return `#${seg}`; // numeric id
-      return map[seg] || (seg.charAt(0).toUpperCase() + seg.slice(1));
+      return map[seg] || (seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, ' '));
     }).join(' / ');
   }, [location.pathname]);
 

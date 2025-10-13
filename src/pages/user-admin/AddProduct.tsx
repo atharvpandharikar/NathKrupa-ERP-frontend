@@ -183,9 +183,40 @@ export default function AddProduct() {
     });
 
     useEffect(() => {
-        loadInitialData();
-        fetchVehicleData();
+        loadInitialDataOptimized();
     }, []);
+
+    const loadInitialDataOptimized = async () => {
+        try {
+            setLoading(true);
+            console.log('🚀 Loading form data with optimizations...');
+
+            // Load essential data first (categories, brands, tags) with smaller page sizes
+            const [categoriesData, brandsData, tagsData] = await Promise.all([
+                shopCategoriesApi.list(), // Use regular list instead of listAll
+                shopBrandsApi.list(), // Use regular list instead of listAll  
+                shopTagsApi.list(),
+            ]);
+
+            console.log('✅ Essential data loaded:', {
+                categories: categoriesData.length,
+                brands: brandsData.length,
+                tags: tagsData.length
+            });
+
+            setCategories(categoriesData as any);
+            setBrands(brandsData as any);
+            setTags(tagsData);
+
+            // Load vehicle data in background (non-blocking)
+            fetchVehicleDataBackground();
+        } catch (error) {
+            console.error('Error loading initial data:', error);
+            toast.error('Failed to load form data');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const loadInitialData = async () => {
         try {
@@ -224,6 +255,29 @@ export default function AddProduct() {
             toast.error('Failed to load form data');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchVehicleDataBackground = async () => {
+        try {
+            console.log('🚗 Loading vehicle data in background...');
+            const [carMakersResult, compatibilityGroupsResult] = await Promise.all([
+                fetchCarMakers({ page_size: 50 }), // Reduced page size
+                fetchCompatibilityGroups(undefined, { page_size: 50 }) // Reduced page size
+            ]);
+
+            if (carMakersResult.success && carMakersResult.data) {
+                const carMakers = carMakersResult.data.results || carMakersResult.data.data || [];
+                setCarMakers(carMakers);
+                console.log('✅ Car makers loaded:', carMakers.length);
+            }
+            if (compatibilityGroupsResult.success && compatibilityGroupsResult.data) {
+                const compatibilityGroups = compatibilityGroupsResult.data.results || compatibilityGroupsResult.data.data || [];
+                setCompatibilityGroups(compatibilityGroups);
+                console.log('✅ Compatibility groups loaded:', compatibilityGroups.length);
+            }
+        } catch (error) {
+            console.error('Error fetching vehicle data:', error);
         }
     };
 
@@ -846,7 +900,7 @@ export default function AddProduct() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="w-full max-w-full lg:max-w-5xl mx-auto">
             {/* Header */}
             <div className="flex items-center gap-4 mb-6">
                 <Button

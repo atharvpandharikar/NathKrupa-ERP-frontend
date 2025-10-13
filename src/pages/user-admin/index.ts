@@ -12,7 +12,9 @@ export { default as SellerList } from './SellerList';
 export { default as AddressList } from './AddressList';
 export { default as ReviewList } from './ReviewList';
 export { default as WishlistList } from './WishlistList';
+export { default as CustomerList } from './CustomerList';
 export { default as QuotationList } from './QuotationList';
+export { default as CreateQuote } from './CreateQuote';
 export { default as SeoEntryList } from './SeoEntryList';
 export { default as GarageVehicleList } from './GarageVehicleList';
 

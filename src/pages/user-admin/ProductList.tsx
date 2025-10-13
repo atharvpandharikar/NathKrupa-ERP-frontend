@@ -166,37 +166,37 @@ export default function ProductList() {
     }
 
     return (
-        <div className="w-full h-full">
+        <div className="w-full max-w-full">
             {/* Header */}
-            <div className="flex items-center justify-between mb-4 px-1">
+            <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                     <Box className="w-6 h-6 text-indigo-600" />
                     <div>
-                        <h1 className="text-lg font-bold text-gray-900">Product Management</h1>
-                        <p className="text-sm text-gray-600">Total products: {products.length}</p>
+                        <h1 className="text-lg font-bold">Product Management</h1>
+                        <p className="text-sm text-muted-foreground">Total products: {products.length}</p>
                     </div>
                 </div>
             </div>
 
             {/* Search and Controls */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4 px-1">
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:flex-none">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2 w-full lg:w-auto">
+                    <div className="relative flex-1 lg:flex-none">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                         <Input
                             placeholder="Search products..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-8 w-full sm:w-64 text-sm"
+                            className="pl-8 w-full lg:w-64 text-sm"
                         />
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="hidden sm:flex">
                         <Search className="w-4 h-4 mr-1" />
                         Search
                     </Button>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-2 w-full lg:w-auto flex-wrap">
                     {/* View Mode Toggle */}
                     <div className="flex items-center gap-1 border rounded-lg p-1">
                         <Button
@@ -237,11 +237,11 @@ export default function ProductList() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4 px-1">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 <Card>
                     <CardContent className="p-3">
                         <div className="text-lg font-bold text-indigo-600">{products.length}</div>
-                        <div className="text-xs text-gray-600">Total Products</div>
+                        <div className="text-xs text-muted-foreground">Total Products</div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -249,7 +249,7 @@ export default function ProductList() {
                         <div className="text-lg font-bold text-green-600">
                             {products.filter(p => p.is_active).length}
                         </div>
-                        <div className="text-xs text-gray-600">Active Products</div>
+                        <div className="text-xs text-muted-foreground">Active Products</div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -257,7 +257,7 @@ export default function ProductList() {
                         <div className="text-lg font-bold text-orange-600">
                             {products.filter(p => !p.is_active).length}
                         </div>
-                        <div className="text-xs text-gray-600">Inactive Products</div>
+                        <div className="text-xs text-muted-foreground">Inactive Products</div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -265,40 +265,40 @@ export default function ProductList() {
                         <div className="text-lg font-bold text-red-600">
                             {products.filter(p => ((p as any).stock_quantity ?? p.stock ?? 0) <= 5).length}
                         </div>
-                        <div className="text-xs text-gray-600">Low Stock</div>
+                        <div className="text-xs text-muted-foreground">Low Stock</div>
                     </CardContent>
                 </Card>
             </div>
 
             {/* Table View */}
             {viewMode === 'table' && (
-                <Card className="overflow-hidden">
+                <Card className="w-full overflow-hidden">
                     <CardContent className="p-0">
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[800px]">
+                        <div className="w-full">
+                            <table className="w-full table-auto">
                                 <thead className="bg-gray-50 border-b">
                                     <tr>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8">#</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Image</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Title</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">Brand</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">Category</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">Price</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Tax (%)</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">HSN</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Barcode</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Stock</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Status</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax (%)</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSN</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {filteredProducts.map((product, index) => (
                                         <tr key={product.product_id} className="hover:bg-gray-50">
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900">
+                                            <td className="px-2 py-2 text-xs text-gray-900">
                                                 {index + 1}
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap">
+                                            <td className="px-2 py-2">
                                                 <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">
                                                     {(() => {
                                                         const src = resolveProductImageUrl(product); return src ? (
@@ -322,21 +322,21 @@ export default function ProductList() {
                                                 </div>
                                             </td>
                                             <td className="px-2 py-2">
-                                                <div className="text-xs font-medium text-gray-900 truncate max-w-[120px]" title={product.title}>
+                                                <div className="text-xs font-medium text-gray-900 truncate" title={product.title}>
                                                     {product.title}
                                                 </div>
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900">
-                                                <div className="truncate max-w-[80px]" title={product.brand?.name || '-'}>
+                                            <td className="px-2 py-2 text-xs text-gray-900">
+                                                <div className="truncate" title={product.brand?.name || '-'}>
                                                     {product.brand?.name || '-'}
                                                 </div>
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900">
-                                                <div className="truncate max-w-[100px]" title={product.category?.title || '-'}>
+                                            <td className="px-2 py-2 text-xs text-gray-900">
+                                                <div className="truncate" title={product.category?.title || '-'}>
                                                     {product.category?.title || '-'}
                                                 </div>
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900">
+                                            <td className="px-2 py-2 text-xs text-gray-900">
                                                 <div className="space-y-0.5">
                                                     <div className="font-medium">{formatPrice(product.price)}</div>
                                                     {((product.discount_percentage ?? 0) > 0 || (product.discount_amount ?? 0) > 0) && (
@@ -349,16 +349,16 @@ export default function ProductList() {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900 text-center">
+                                            <td className="px-2 py-2 text-xs text-gray-900 text-center">
                                                 {(product as any).tax_rate ?? product.taxes ?? 0}%
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900 text-center">
+                                            <td className="px-2 py-2 text-xs text-gray-900 text-center">
                                                 {product.hsn_code || '-'}
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900 text-center">
+                                            <td className="px-2 py-2 text-xs text-gray-900 text-center">
                                                 {product.barcode || '-'}
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-900 text-center">
+                                            <td className="px-2 py-2 text-xs text-gray-900 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <span className="font-medium">{(product as any).stock_quantity ?? product.stock}</span>
                                                     {((product as any).stock_quantity ?? product.stock ?? 0) <= 5 && (
@@ -366,7 +366,7 @@ export default function ProductList() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-center">
+                                            <td className="px-2 py-2 text-center">
                                                 <Badge
                                                     variant={product.is_active ? "default" : "secondary"}
                                                     className={`text-xs px-1.5 py-0.5 ${product.is_active
@@ -377,7 +377,7 @@ export default function ProductList() {
                                                     {product.is_active ? 'Active' : 'Inactive'}
                                                 </Badge>
                                             </td>
-                                            <td className="px-2 py-2 whitespace-nowrap text-center">
+                                            <td className="px-2 py-2 text-center">
                                                 <div className="flex items-center justify-center gap-1">
                                                     <Button
                                                         size="sm"

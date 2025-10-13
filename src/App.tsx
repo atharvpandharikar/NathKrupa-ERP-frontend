@@ -76,6 +76,9 @@ const LazyWishlistList = React.lazy(() => import("./pages/user-admin/WishlistLis
 const LazyQuotationList = React.lazy(() => import("./pages/user-admin/QuotationList"));
 const LazySeoEntryList = React.lazy(() => import("./pages/user-admin/SeoEntryList"));
 const LazyGarageVehicleList = React.lazy(() => import("./pages/user-admin/GarageVehicleList"));
+const LazyVehicleCompatibilityList = React.lazy(() => import("./pages/user-admin/VehicleCompatibilityList"));
+const LazyCustomerList = React.lazy(() => import("./pages/user-admin/CustomerList"));
+const LazyCreateQuote = React.lazy(() => import("./pages/user-admin/CreateQuote"));
 const LazyShopAdminLayout = React.lazy(() => import("./components/layout/ShopAdminLayout"));
 
 // Wrapper component for ShopAdminLayout
@@ -159,14 +162,17 @@ const App = () => {
                   <Route path="sellers" element={<LazySellerList />} />
                   <Route path="sellers/add" element={<LazySellerList />} />
                   <Route path="sellers/edit/:id" element={<LazySellerList />} />
+                  <Route path="customers" element={<LazyCustomerList />} />
                   <Route path="addresses" element={<LazyAddressList />} />
                   <Route path="reviews" element={<LazyReviewList />} />
                   <Route path="wishlists" element={<LazyWishlistList />} />
                   <Route path="quotations" element={<LazyQuotationList />} />
-                  <Route path="quotations/create" element={<LazyQuotationList />} />
+                  <Route path="create-quote" element={<LazyCreateQuote />} />
+                  <Route path="quotations/create" element={<LazyCreateQuote />} />
                   <Route path="quotations/edit/:id" element={<LazyQuotationList />} />
                   <Route path="seo" element={<LazySeoEntryList />} />
                   <Route path="garage-vehicles" element={<LazyGarageVehicleList />} />
+                  <Route path="vehicle-compatibility" element={<LazyVehicleCompatibilityList />} />
                 </Route>
 
                 {/* Dashboard & feature routes use the main layout and require auth */}

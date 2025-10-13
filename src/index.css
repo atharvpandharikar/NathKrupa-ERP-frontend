@@ -20,29 +20,92 @@
     scrollbar-color: #9ca3af transparent;
   }
 
+  /* Sidebar scrollbar styles */
+  .scrollbar-thumb-sidebar-border {
+    scrollbar-color: hsl(var(--sidebar-border)) transparent;
+  }
+
+  .scrollbar-track-transparent {
+    scrollbar-color: hsl(var(--sidebar-border)) transparent;
+  }
+
+  .hover\:scrollbar-thumb-sidebar-accent:hover {
+    scrollbar-color: hsl(var(--sidebar-accent)) transparent;
+  }
+
   /* Webkit scrollbar styles for better cross-browser support */
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
-    background: #f3f4f6;
+    background: transparent;
     border-radius: 3px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #d1d5db;
+    background: hsl(var(--sidebar-border));
     border-radius: 3px;
+    transition: background-color 0.2s ease;
+  }
+
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+    background: hsl(var(--sidebar-accent));
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+    background: hsl(var(--sidebar-accent-foreground) / 0.3);
+  }
+
+  /* Ensure scrollbar works on all screen sizes */
+  @media (min-width: 768px) {
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 6px;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .scrollbar-thin::-webkit-scrollbar {
+      width: 4px;
+    }
   }
 
   /* Smooth scrolling behavior */
   .scroll-smooth {
     scroll-behavior: smooth;
   }
+
+  /* Tablet layout fixes */
+  /* @media (min-width: 768px) and (max-width: 1024px) {
+    .tablet-scroll-container {
+    }
+    
+    .tablet-content-wrapper {
+      width: 100%;
+    }
+  } */
+
+  /* Ensure proper scrolling on all screen sizes */
+  /* .overflow-auto {
+    
+  }
+
+  .overflow-auto::-webkit-scrollbar {
+    
+  }
+
+  .overflow-auto::-webkit-scrollbar-track {
+    
+  }
+
+  .overflow-auto::-webkit-scrollbar-thumb {
+    
+  }
+
+  .overflow-auto:hover::-webkit-scrollbar-thumb {
+    
+  } */
 }
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
@@ -223,6 +286,7 @@ All colors MUST be HSL.
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
+  line-clamp: 1;
 }
 
 .line-clamp-2 {
@@ -230,6 +294,7 @@ All colors MUST be HSL.
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .line-clamp-3 {
@@ -237,4 +302,5 @@ All colors MUST be HSL.
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
 }

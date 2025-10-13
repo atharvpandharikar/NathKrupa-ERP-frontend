@@ -398,8 +398,7 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
 
     useEffect(() => {
         if (isOpen) {
-            fetchSelectOptions();
-            fetchVehicleData();
+            fetchSelectOptionsOptimized();
             form.reset({
                 title: '',
                 description: '',
@@ -874,7 +873,7 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
         });
     };
 
-    const fetchSelectOptions = async () => {
+    const fetchSelectOptionsOptimized = async () => {
         try {
             // Check if user is authenticated before making API calls
             const tokens = getTokens();
@@ -885,10 +884,13 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                 return;
             }
 
+            console.log('🚀 Loading form options with optimizations...');
+
+            // Load essential data first with smaller page sizes
             const [brandsResult, categoriesResult, tagsResult] = await Promise.all([
-                fetchBrands({ page_size: 100 }),
-                shopCategoriesApi.listAll(), // Use listAll to get all categories
-                fetchTags({ page_size: 100 })
+                fetchBrands({ page_size: 50 }), // Reduced page size
+                shopCategoriesApi.list(), // Use regular list instead of listAll
+                fetchTags({ page_size: 50 }) // Reduced page size
             ]);
 
             if (brandsResult.success && brandsResult.data) {
@@ -910,10 +912,39 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
             if (tagsResult.success && tagsResult.data) {
                 const tags = tagsResult.data.results || tagsResult.data.data || [];
                 setTags(tags);
+                console.log('✅ Tags loaded:', tags.length);
             }
+
+            console.log('✅ Essential form options loaded successfully');
+
+            // Load vehicle data in background (non-blocking)
+            fetchVehicleDataBackground();
         } catch (error) {
             console.error('Error fetching select options:', error);
             // If it's an authentication error, the individual functions will handle redirect
+        }
+    };
+
+    const fetchVehicleDataBackground = async () => {
+        try {
+            console.log('🚗 Loading vehicle data in background...');
+            const [carMakersResult, compatibilityGroupsResult] = await Promise.all([
+                fetchCarMakers({ page_size: 50 }), // Reduced page size
+                fetchCompatibilityGroups(undefined, { page_size: 50 }) // Reduced page size
+            ]);
+
+            if (carMakersResult.success && carMakersResult.data) {
+                const carMakers = carMakersResult.data.results || carMakersResult.data.data || [];
+                setCarMakers(carMakers);
+                console.log('✅ Car makers loaded:', carMakers.length);
+            }
+            if (compatibilityGroupsResult.success && compatibilityGroupsResult.data) {
+                const compatibilityGroups = compatibilityGroupsResult.data.results || compatibilityGroupsResult.data.data || [];
+                setCompatibilityGroups(compatibilityGroups);
+                console.log('✅ Compatibility groups loaded:', compatibilityGroups.length);
+            }
+        } catch (error) {
+            console.error('Error fetching vehicle data:', error);
         }
     };
 
