@@ -27,7 +27,8 @@ import {
     Save,
     Calculator
 } from "lucide-react";
-import { purchaseApi, shopProductsApi, type Vendor, type PurchaseBill, type ShopProduct } from "@/lib/api";
+import { purchaseApi, type Vendor, type PurchaseBill } from "@/lib/api";
+import { shopProductsApi, type ShopProduct } from "@/lib/shop-api";
 import { toast } from "sonner";
 import AddProductForm from "@/components/AddProductForm";
 import { SearchableSelect, SearchableSelectOption } from "@/components/ui/searchable-select";
@@ -45,11 +46,14 @@ interface BillItem {
 
 // Helper function to convert products to SearchableSelectOption format
 const convertProductsToOptions = (products: ShopProduct[]): SearchableSelectOption[] => {
-    return products.map((product) => ({
-        value: product.product_id,
-        label: `${product.title} - MRP: ₹${product.price}${product.purchase_price ? ` | Cost: ₹${product.purchase_price}` : ''} | GST: ${product.taxes || 18}%`,
-        searchableText: `${product.title} ${product.product_id} ${product.price} ${product.purchase_price || ''} ${product.taxes || 18}`.toLowerCase()
-    }));
+    return products.map((product) => {
+        const purchasePrice = (product as any).purchase_price;
+        return {
+            value: product.product_id,
+            label: `${product.title} - MRP: ₹${product.price}${purchasePrice ? ` | Cost: ₹${purchasePrice}` : ''} | GST: ${product.taxes || 18}%`,
+            searchableText: `${product.title} ${product.product_id} ${product.price} ${purchasePrice || ''} ${product.taxes || 18}`.toLowerCase()
+        };
+    });
 };
 
 export default function NewBill() {
@@ -90,7 +94,7 @@ export default function NewBill() {
                 setVendors(Array.isArray(vendorsResponse) ? vendorsResponse : []);
 
                 // Fetch products
-                const productsResponse = await shopProductsApi.list();
+                const productsResponse = await shopProductsApi.list({ ordering: '-created_at' });
                 setProducts(Array.isArray(productsResponse) ? productsResponse : []);
             } catch (error) {
                 console.error('Failed to fetch data:', error);
@@ -119,7 +123,7 @@ export default function NewBill() {
             if (selectedProduct) {
                 newItems[index].product = selectedProduct;
                 // Use purchase_price if available, otherwise use price as fallback
-                newItems[index].purchase_price = selectedProduct.purchase_price || selectedProduct.price;
+                newItems[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
                 // Auto-detect GST% from product's taxes field, default to 18% if not available
                 newItems[index].gst_percent = selectedProduct.taxes || 18;
             }
@@ -213,12 +217,10 @@ export default function NewBill() {
             product_id: newProduct.product_id,
             title: newProduct.title,
             price: newProduct.price,
-            price_inclusive_tax: newProduct.price_inclusive_tax || newProduct.price,
             taxes: newProduct.taxes,
             discount_amount: newProduct.discount_amount,
             is_active: newProduct.is_active,
             stock: newProduct.stock,
-            starting_price: newProduct.starting_price || newProduct.price.toString(),
             hsn_code: newProduct.hsn_code,
             barcode: newProduct.barcode,
             image: newProduct.image,
@@ -226,8 +228,11 @@ export default function NewBill() {
             brand: newProduct.brand,
             tags: newProduct.tags,
             product_variant: newProduct.product_variant
-        };
-        setProducts([...products, convertedProduct]);
+        } as ShopProduct;
+        setProducts(prev => {
+            const next = [convertedProduct, ...prev];
+            return next;
+        });
         setShowNewProductForm(false);
     };
 

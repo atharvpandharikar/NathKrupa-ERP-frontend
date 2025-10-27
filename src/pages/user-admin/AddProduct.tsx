@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
     Select,
@@ -29,7 +30,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
-import { Check, ChevronsUpDown, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Trash2, Package } from 'lucide-react';
 import {
     Form,
     FormControl,
@@ -42,6 +43,8 @@ import {
 import { ArrowLeft, Save, Upload, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { shopProductsApi, shopCategoriesApi, shopBrandsApi, shopTagsApi, shopApi, type ShopCategory, type ShopBrand } from '@/lib/shop-api';
+import optimizedShopApi from '@/lib/optimized-shop-api';
+import { inventoryApiFunctions, type Unit } from '@/lib/api';
 import { API_ROOT, getTokens, clearTokens } from '@/lib/api';
 
 // Form validation schema
@@ -50,7 +53,7 @@ const productSchema = z.object({
     description: z.string().optional(),
     price: z.number().min(0, 'Price must be positive'),
     purchase_price: z.number().min(0, 'Purchase price must be positive'),
-    discount_percentage: z.number().min(0).max(100).optional(),
+    discounted_price: z.number().min(0).optional(),
     stock_quantity: z.number().min(0, 'Stock quantity must be positive'),
     hsn_code: z.string().optional(),
     barcode: z.string().optional(),
@@ -64,23 +67,43 @@ const productSchema = z.object({
     is_cod: z.boolean().default(true),
     lead_time: z.number().min(0).optional(),
     rating: z.number().min(0).max(5).optional(),
+    // Physical dimensions
+    weight: z.number().min(0).optional(),
+    length: z.number().min(0).optional(),
+    width: z.number().min(0).optional(),
+    height: z.number().min(0).optional(),
+    volume_m3: z.number().min(0).optional(),
+    // Unit of measurement
+    unit_id: z.string().optional(),
     // Vehicle compatibility fields
+    is_general_product: z.boolean().default(false),
     compatibility_group_id: z.string().optional(),
     compatible_variants: z.array(z.string()).optional(),
 }).refine((data) => {
     // Custom validation: ensure mutual exclusivity
+    const isGeneral = data.is_general_product;
     const hasGroup = data.compatibility_group_id && data.compatibility_group_id !== '';
     const hasVariants = data.compatible_variants && data.compatible_variants.length > 0;
+
+    // If general product, no compatibility needed
+    if (isGeneral) {
+        return true;
+    }
 
     // Both cannot be selected at the same time
     if (hasGroup && hasVariants) {
         return false;
     }
 
+    // For non-general products, require at least one compatibility option
+    if (!hasGroup && !hasVariants) {
+        return false;
+    }
+
     return true;
 }, {
-    message: "Cannot select both compatibility group and specific variants",
-    path: ["compatibility_group_id"]
+    message: "Select either general product, compatibility group, or specific variants",
+    path: ["is_general_product"]
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -134,6 +157,7 @@ export default function AddProduct() {
     const [brands, setBrands] = useState<Brand[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [units, setUnits] = useState<Unit[]>([]);
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [additionalImages, setAdditionalImages] = useState<File[]>([]);
@@ -163,7 +187,6 @@ export default function AddProduct() {
             description: '',
             price: 0,
             purchase_price: 0,
-            discount_percentage: 0,
             stock_quantity: 0,
             hsn_code: '',
             barcode: '',
@@ -191,22 +214,25 @@ export default function AddProduct() {
             setLoading(true);
             console.log('🚀 Loading form data with optimizations...');
 
-            // Load essential data first (categories, brands, tags) with smaller page sizes
-            const [categoriesData, brandsData, tagsData] = await Promise.all([
-                shopCategoriesApi.list(), // Use regular list instead of listAll
-                shopBrandsApi.list(), // Use regular list instead of listAll  
+            // Load essential data first (categories, brands, tags, units) with smaller page sizes
+            const [categoriesData, brandsData, tagsData, unitsData] = await Promise.all([
+                optimizedShopApi.categories.list(),
+                optimizedShopApi.brands.list(),
                 shopTagsApi.list(),
+                inventoryApiFunctions.units.list(),
             ]);
 
             console.log('✅ Essential data loaded:', {
                 categories: categoriesData.length,
                 brands: brandsData.length,
-                tags: tagsData.length
+                tags: tagsData.length,
+                units: unitsData.length
             });
 
             setCategories(categoriesData as any);
             setBrands(brandsData as any);
             setTags(tagsData);
+            setUnits(unitsData);
 
             // Load vehicle data in background (non-blocking)
             fetchVehicleDataBackground();
@@ -735,7 +761,7 @@ export default function AddProduct() {
         );
     };
 
-    const onSubmit = async (data: ProductFormData) => {
+    const onSubmit: SubmitHandler<ProductFormData> = async (data) => {
         try {
             setLoading(true);
             setUploadProgress(0);
@@ -757,7 +783,9 @@ export default function AddProduct() {
             formData.append('description', data.description || '');
             formData.append('price', data.price.toString());
             formData.append('purchase_price', data.purchase_price.toString());
-            formData.append('discount_percentage', (data.discount_percentage || 0).toString());
+            if (data.discounted_price !== undefined) {
+                formData.append('discounted_price', data.discounted_price.toString());
+            }
             formData.append('stock', data.stock_quantity.toString());
             formData.append('hsn_code', data.hsn_code || '');
             formData.append('barcode', data.barcode || '');
@@ -770,6 +798,23 @@ export default function AddProduct() {
             formData.append('is_cod', data.is_cod.toString());
             formData.append('lead_time', (data.lead_time || 0).toString());
             formData.append('rating', (data.rating || 0).toString());
+
+            // Add organization ID from localStorage
+            const orgId = localStorage.getItem('dev_organization_id') || localStorage.getItem('nk:activeOrganizationId');
+            if (orgId) {
+                formData.append('organization', orgId);
+                console.log('🏢 Adding organization to FormData:', orgId);
+            } else {
+                console.warn('⚠️ No organization ID found in localStorage');
+            }
+
+            // Add physical dimensions and unit
+            if (data.weight !== undefined) formData.append('weight', data.weight.toString());
+            if (data.length !== undefined) formData.append('length', data.length.toString());
+            if (data.width !== undefined) formData.append('width', data.width.toString());
+            if (data.height !== undefined) formData.append('height', data.height.toString());
+            if (data.volume_m3 !== undefined) formData.append('volume_m3', data.volume_m3.toString());
+            if (data.unit_id) formData.append('unit', data.unit_id);
 
             // Add tags
             console.log('Selected tags for submission:', selectedTags);
@@ -793,6 +838,8 @@ export default function AddProduct() {
             });
 
             // Add vehicle compatibility data
+            formData.append('is_general_product', data.is_general_product.toString());
+
             if (compatibilityMode === 'group' && data.compatibility_group_id) {
                 formData.append('compatibility_group', data.compatibility_group_id);
             } else if (compatibilityMode === 'variants') {
@@ -821,6 +868,8 @@ export default function AddProduct() {
             if (tokens?.access) {
                 headers['Authorization'] = `Bearer ${tokens.access}`;
             }
+            // Include organization context header so product is created under active org
+            if (orgId) headers['X-Organization-ID'] = orgId;
 
             // Create XMLHttpRequest for progress tracking
             const xhr = new XMLHttpRequest();
@@ -891,13 +940,7 @@ export default function AddProduct() {
         }
     };
 
-    if (loading && categories.length === 0) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="w-8 h-8 animate-spin" />
-            </div>
-        );
-    }
+    // Do not block initial render; show the form immediately and load options asynchronously
 
     return (
         <div className="w-full max-w-full lg:max-w-5xl mx-auto">
@@ -1164,13 +1207,34 @@ export default function AddProduct() {
                                             name="price"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Selling Price *</FormLabel>
+                                                    <FormLabel>Actual Price (MRP) *</FormLabel>
                                                     <FormControl>
                                                         <Input
                                                             type="number"
+                                                            min="0"
                                                             placeholder="0.00"
                                                             {...field}
                                                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="discounted_price"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Discounted Price</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            placeholder="0.00"
+                                                            {...field}
+                                                            onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
                                                         />
                                                     </FormControl>
                                                     <FormMessage />
@@ -1187,26 +1251,8 @@ export default function AddProduct() {
                                                     <FormControl>
                                                         <Input
                                                             type="number"
+                                                            min="0"
                                                             placeholder="0.00"
-                                                            {...field}
-                                                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-
-                                        <FormField
-                                            control={form.control}
-                                            name="discount_percentage"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Discount %</FormLabel>
-                                                    <FormControl>
-                                                        <Input
-                                                            type="number"
-                                                            placeholder="0"
                                                             {...field}
                                                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                                                         />
@@ -1265,6 +1311,149 @@ export default function AddProduct() {
                                             )}
                                         />
                                     </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Physical Dimensions & Unit */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-lg flex items-center gap-2">
+                                        <Package className="h-5 w-5" />
+                                        Physical Dimensions & Unit
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="weight"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Weight (kg)</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.001"
+                                                            placeholder="0.000"
+                                                            {...field}
+                                                            onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="unit_id"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Default Unit</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Select unit" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {units.map((unit) => (
+                                                                <SelectItem key={unit.id} value={unit.id.toString()}>
+                                                                    {unit.name} ({unit.code})
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="length"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Length (cm)</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            placeholder="0.00"
+                                                            {...field}
+                                                            onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="width"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Width (cm)</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            placeholder="0.00"
+                                                            {...field}
+                                                            onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="height"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Height (cm)</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            placeholder="0.00"
+                                                            {...field}
+                                                            onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <FormField
+                                        control={form.control}
+                                        name="volume_m3"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Volume (m³)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.0001"
+                                                        placeholder="0.0000"
+                                                        {...field}
+                                                        onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
+                                                    />
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Automatically calculated from length × width × height if not specified
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                 </CardContent>
                             </Card>
 
@@ -1355,34 +1544,47 @@ export default function AddProduct() {
                                     <CardTitle className="text-lg">Vehicle Compatibility</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
+                                    {/* General Product Checkbox */}
+                                    <FormField
+                                        control={form.control}
+                                        name="is_general_product"
+                                        render={({ field }) => (
+                                            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                <FormControl>
+                                                    <Checkbox
+                                                        checked={field.value}
+                                                        onCheckedChange={(checked) => {
+                                                            field.onChange(checked);
+                                                            if (checked) {
+                                                                // Clear compatibility options when general is selected
+                                                                form.setValue('compatibility_group_id', '');
+                                                                form.setValue('compatible_variants', []);
+                                                                setCompatibilityMode('none');
+                                                                setSelectedCarMaker('');
+                                                                setSelectedCarModel('');
+                                                                setSelectedYear(undefined);
+                                                                setSelectedVariants([]);
+                                                                setCarModels([]);
+                                                                setCarVariants([]);
+                                                                setAvailableYears([]);
+                                                            }
+                                                        }}
+                                                    />
+                                                </FormControl>
+                                                <div className="space-y-1 leading-none">
+                                                    <FormLabel>
+                                                        General Product (Available for all vehicles)
+                                                    </FormLabel>
+                                                    <FormDescription>
+                                                        Check this if the product is compatible with all vehicle models and variants
+                                                    </FormDescription>
+                                                </div>
+                                            </FormItem>
+                                        )}
+                                    />
+
                                     {/* Three mutually exclusive options */}
                                     <div className="space-y-6">
-                                        {/* Option 0: No Vehicle Compatibility */}
-                                        <div className="flex items-center space-x-2">
-                                            <input
-                                                type="radio"
-                                                id="no-compatibility"
-                                                name="compatibility-option"
-                                                checked={compatibilityMode === 'none'}
-                                                onChange={() => {
-                                                    setCompatibilityMode('none');
-                                                    // Clear both options
-                                                    form.setValue('compatibility_group_id', '');
-                                                    form.setValue('compatible_variants', []);
-                                                    setSelectedCarMaker('');
-                                                    setSelectedCarModel('');
-                                                    setSelectedYear(undefined);
-                                                    setSelectedVariants([]);
-                                                    setCarModels([]);
-                                                    setCarVariants([]);
-                                                    setAvailableYears([]);
-                                                }}
-                                                className="w-4 h-4"
-                                            />
-                                            <label htmlFor="no-compatibility" className="text-sm font-medium">
-                                                No Vehicle Compatibility (General Product)
-                                            </label>
-                                        </div>
 
                                         <div className="space-y-6">
                                             {/* Option 1: Compatibility Group */}

@@ -1,6 +1,6 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import { Home, Users, FileSpreadsheet, BarChart3, Settings, Moon, Sun, LogOut, Layers, IndianRupee, Tags, Car, Factory, User as UserIcon, Laptop, Clock, Play, CheckCircle, X, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { Home, Users, FileSpreadsheet, BarChart3, Settings, Moon, Sun, LogOut, Layers, IndianRupee, Tags, Car, Factory, User as UserIcon, Laptop, Clock, Play, CheckCircle, X, ChevronDown, ChevronRight, FileText, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeMode, useTheme } from "@/hooks/useTheme";
 import { getTokens, workOrdersApi } from "@/lib/api";

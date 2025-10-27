@@ -26,11 +26,23 @@ export default function ProductList() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filteredProducts, setFilteredProducts] = useState<ShopProduct[]>([]);
-    const [showActiveOnly, setShowActiveOnly] = useState(true);
+    const [showActiveOnly, setShowActiveOnly] = useState(false);
     const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
     useEffect(() => {
         loadProducts();
+
+        // Refetch products when the window gets focus
+        const handleFocus = () => {
+            console.log('🔄 Window focused, reloading products...');
+            loadProducts();
+        };
+
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+        };
     }, []);
 
     useEffect(() => {
@@ -51,7 +63,7 @@ export default function ProductList() {
     const loadProducts = async () => {
         try {
             setLoading(true);
-            const data = await shopProductsApi.list();
+            const data = await shopProductsApi.list({ ordering: '-created_at' });
             console.log('📦 Loaded products:', data.length);
             console.log('📦 Sample product data:', data[0]);
             console.log('📦 Sample product image:', data[0]?.image);

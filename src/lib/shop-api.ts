@@ -13,7 +13,7 @@ const SHOP_BASE = `${SHOP_API_ROOT}/api/shop`;
 // Token management (reuse existing token system)
 const TOKEN_KEY = "nk:tokens";
 
-export function getTokens(): { access: string; refresh: string } | null {
+export function getTokens(): { access: string; refresh: string; activeOrganizationId?: number } | null {
     try {
         const raw = localStorage.getItem(TOKEN_KEY);
         return raw ? JSON.parse(raw) : null;
@@ -25,7 +25,20 @@ export function getTokens(): { access: string; refresh: string } | null {
 // Auth headers helper
 export function authHeaders(): HeadersInit {
     const t = getTokens();
-    return t?.access ? { Authorization: `Bearer ${t.access}` } : {};
+    const headers: Record<string, string> = {};
+    if (t?.access) headers.Authorization = `Bearer ${t.access}`;
+    // Add organization context if available (multi-tenancy)
+    // Check multiple sources in order of preference
+    const orgId = t?.activeOrganizationId ||
+        localStorage.getItem('nk:activeOrganizationId') ||
+        localStorage.getItem('dev_organization_id');
+    if (orgId) {
+        headers['X-Organization-ID'] = String(orgId);
+        console.log('🏢 Sending organization header:', orgId);
+    } else {
+        console.warn('⚠️ No organization ID found in tokens or localStorage');
+    }
+    return headers;
 }
 
 // Request helper
@@ -330,16 +343,19 @@ export interface ShopQuotation {
 export const shopProductsApi = {
     list: async (params?: Record<string, any>) => {
         const queryParams = new URLSearchParams();
-        if (params) {
-            Object.entries(params).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    queryParams.append(key, value.toString());
-                }
-            });
-        }
+        const defaults: Record<string, any> = {
+            ordering: '-created_at',
+        };
 
-        const response = await shopApi.get<any>(`/shop-product-list/?${queryParams.toString()}`);
-        return response.error ? [] : response.data || [];
+        const combined = { ...defaults, ...(params || {}) };
+        Object.entries(combined).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.append(key, value.toString());
+            }
+        });
+
+        const url = `/shop-product-list/?${queryParams.toString()}`;
+        return fetchAll<ShopProduct>(url);
     },
 
     get: async (productId: string) => {

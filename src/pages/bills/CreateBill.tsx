@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { WorkOrderDatePicker } from "@/components/ui/work-order-date-picker";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Calendar, User, Car, DollarSign, Plus, X, FileText } from "lucide-react";
+import { ArrowLeft, Save, Calendar, User, Car, DollarSign, Plus, X, FileText, Package } from "lucide-react";
 import { Link } from "react-router-dom";
 import { customersApi, addedFeaturesApi, featureApi, billsApi, quotationApi, type Customer, type AddedFeature, type FeatureCategory, type FeatureType, type FeaturePrice, type QuotationData } from "@/lib/api";
 
@@ -720,6 +720,27 @@ export default function CreateBill() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Inventory Items Section */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                            <span className="flex items-center gap-2">
+                                <Package className="h-5 w-5" />
+                                Inventory Items
+                            </span>
+                            <Button size="sm" variant="outline" className="gap-1">
+                                <Plus className="h-4 w-4" />
+                                Add from Inventory
+                            </Button>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-sm text-muted-foreground py-4 text-center">
+                            Add products from your inventory to this bill. This will help track stock levels and ensure accurate billing.
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Additional Work Section */}
                 <Card>

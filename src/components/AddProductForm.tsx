@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Select,
     SelectContent,
@@ -33,7 +34,8 @@ import { Loader2, Plus, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getTokens, clearTokens, API_ROOT } from '@/lib/api';
 import { SearchableSelect, SearchableSelectOption } from '@/components/ui/searchable-select';
-import { shopCategoriesApi, ShopCategory } from '@/lib/shop-api';
+import { shopCategoriesApi, ShopCategory, authHeaders } from '@/lib/shop-api';
+import { inventoryApiFunctions, type Unit } from '@/lib/api';
 
 // Product form data interface matching shop app
 interface ProductFormData {
@@ -203,7 +205,7 @@ const productSchema = z.object({
     price: z.number().min(0, 'Price must be a positive number').optional(),
     purchase_price: z.number({ required_error: 'Purchase price is required' }).min(0, 'Purchase price must be a positive number'),
     discounted_price: z.number().min(0, 'Discounted price must be a positive number').optional(),
-    discount_amount: z.number().min(0, 'Discount must be a positive number').optional(),
+    discount_amount: z.number().min(0, 'Discount amount must be a positive number').optional(),
     stock: z.number({ required_error: 'Stock is required' }).min(0, 'Stock must be a positive number'),
     lead_time: z.number({ required_error: 'Lead time is required' }).min(1, 'Lead time must be at least 1 day').max(365, 'Lead time cannot exceed 365 days'),
     category_id: z.string().min(1, 'Category is required'),
@@ -215,23 +217,43 @@ const productSchema = z.object({
     is_available: z.boolean().default(true),
     bulk_order_available: z.boolean().default(true),
     is_cod: z.boolean().default(true),
+    // Physical dimensions
+    weight: z.number().min(0).optional(),
+    length: z.number().min(0).optional(),
+    width: z.number().min(0).optional(),
+    height: z.number().min(0).optional(),
+    volume_m3: z.number().min(0).optional(),
+    // Unit of measurement
+    unit_id: z.string().optional(),
     // Vehicle compatibility fields
+    is_general_product: z.boolean().default(false),
     compatibility_group_id: z.string().optional(),
     compatible_variants: z.array(z.string()).optional(),
 }).refine((data) => {
     // Custom validation: ensure mutual exclusivity
+    const isGeneral = data.is_general_product;
     const hasGroup = data.compatibility_group_id && data.compatibility_group_id !== '';
     const hasVariants = data.compatible_variants && data.compatible_variants.length > 0;
+
+    // If general product, no compatibility needed
+    if (isGeneral) {
+        return true;
+    }
 
     // Both cannot be selected at the same time
     if (hasGroup && hasVariants) {
         return false;
     }
 
+    // For non-general products, require at least one compatibility option
+    if (!hasGroup && !hasVariants) {
+        return false;
+    }
+
     return true;
 }, {
-    message: "Cannot select both compatibility group and specific variants",
-    path: ["compatibility_group_id"]
+    message: "Select either general product, compatibility group, or specific variants",
+    path: ["is_general_product"]
 });
 
 type ProductFormDataZod = z.infer<typeof productSchema>;
@@ -357,6 +379,7 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
     const [breadcrumbCategories, setBreadcrumbCategories] = useState<ShopCategory[]>([]);
     const [tags, setTags] = useState<any[]>([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [units, setUnits] = useState<Unit[]>([]);
 
     // Vehicle compatibility state
     const [carMakers, setCarMakers] = useState<CarMaker[]>([]);
@@ -378,7 +401,6 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
             description: '',
             price: undefined,
             discounted_price: undefined,
-            discount_amount: undefined,
             stock: undefined,
             lead_time: undefined,
             category_id: '',
@@ -404,7 +426,6 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                 description: '',
                 price: undefined,
                 discounted_price: undefined,
-                discount_amount: undefined,
                 stock: undefined,
                 lead_time: undefined,
                 category_id: '',
@@ -887,10 +908,11 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
             console.log('🚀 Loading form options with optimizations...');
 
             // Load essential data first with smaller page sizes
-            const [brandsResult, categoriesResult, tagsResult] = await Promise.all([
+            const [brandsResult, categoriesResult, tagsResult, unitsData] = await Promise.all([
                 fetchBrands({ page_size: 50 }), // Reduced page size
                 shopCategoriesApi.list(), // Use regular list instead of listAll
-                fetchTags({ page_size: 50 }) // Reduced page size
+                fetchTags({ page_size: 50 }), // Reduced page size
+                inventoryApiFunctions.units.list()
             ]);
 
             if (brandsResult.success && brandsResult.data) {
@@ -914,6 +936,10 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                 setTags(tags);
                 console.log('✅ Tags loaded:', tags.length);
             }
+
+            // Set units
+            setUnits(unitsData);
+            console.log('✅ Units loaded:', unitsData.length);
 
             console.log('✅ Essential form options loaded successfully');
 
@@ -1108,7 +1134,8 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                 title: productData.title,
                 description: productData.description || '',
                 price: productData.price,
-                discount_amount: productData.discount_amount || 0,
+                purchase_price: productData.purchase_price,
+                discounted_price: productData.discounted_price,
                 rating: productData.rating || 4.5,
                 lead_time: productData.lead_time || 5,
                 stock: productData.stock || 0,
@@ -1119,6 +1146,14 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                 is_cod: productData.is_cod ?? true,
                 hsn_code: productData.hsn_code || '',
                 barcode: productData.barcode || '',
+                // Physical dimensions
+                weight: productData.weight,
+                length: productData.length,
+                width: productData.width,
+                height: productData.height,
+                volume_m3: productData.volume_m3,
+                // Unit of measurement
+                unit: productData.unit_id,
                 // IDs coercion
                 category: normalizeId(productData.category_id || productData.category?.id),
                 tags: Array.isArray(productData.tags)
@@ -1128,7 +1163,8 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                     ? normalizeId(productData.brand_id)
                     : null,
                 // Vehicle compatibility fields
-                compatibility_group: productData.compatibility_group ? normalizeId(productData.compatibility_group) : null,
+                is_general_product: productData.is_general_product || false,
+                compatibility_group: productData.compatibility_group_id ? normalizeId(productData.compatibility_group_id) : null,
                 compatible_variants: productData.compatible_variants || [],
             };
 
@@ -1180,11 +1216,8 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
 
             console.log('🔧 Making request to: http://127.0.0.1:8000/api/shop/shop/create/products/');
 
-            const tokens = getTokens();
-            const headers: Record<string, string> = {};
-            if (tokens?.access) {
-                headers['Authorization'] = `Bearer ${tokens.access}`;
-            }
+            // Use authHeaders() to include both Authorization and X-Organization-ID
+            const headers = authHeaders();
 
             const response = await fetch(`${API_ROOT}/api/shop/shop/create/products/`, {
                 method: 'POST',
@@ -1280,11 +1313,8 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                 formData.append(`alt_text_${index}`, '');
             });
 
-            const tokens = getTokens();
-            const headers: Record<string, string> = {};
-            if (tokens?.access) {
-                headers['Authorization'] = `Bearer ${tokens.access}`;
-            }
+            // Use authHeaders() to include both Authorization and X-Organization-ID
+            const headers = authHeaders();
 
             const response = await fetch(`${API_ROOT}/api/shop/shop/upload-product-images/`, {
                 method: 'POST',
@@ -1330,7 +1360,6 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
             description: '',
             price: undefined,
             discounted_price: undefined,
-            discount_amount: undefined,
             stock: undefined,
             lead_time: undefined,
             category_id: '',
@@ -1423,29 +1452,11 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                                             name="price"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Original Price (₹)</FormLabel>
+                                                    <FormLabel>Actual Price (MRP)</FormLabel>
                                                     <FormControl>
                                                         <Input
                                                             type="number"
-                                                            placeholder="0.00"
-                                                            value={field.value ?? ''}
-                                                            onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-
-                                        <FormField
-                                            control={form.control}
-                                            name="purchase_price"
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel>Purchase Price (₹) *</FormLabel>
-                                                    <FormControl>
-                                                        <Input
-                                                            type="number"
+                                                            min="0"
                                                             placeholder="0.00"
                                                             value={field.value ?? ''}
                                                             onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
@@ -1461,10 +1472,31 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                                             name="discounted_price"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>Discounted Price (₹)</FormLabel>
+                                                    <FormLabel>Discounted Price</FormLabel>
                                                     <FormControl>
                                                         <Input
                                                             type="number"
+                                                            min="0"
+                                                            placeholder="0.00"
+                                                            value={field.value ?? ''}
+                                                            onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+
+                                        <FormField
+                                            control={form.control}
+                                            name="purchase_price"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel>Purchase Price *</FormLabel>
+                                                    <FormControl>
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
                                                             placeholder="0.00"
                                                             value={field.value ?? ''}
                                                             onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
@@ -1656,39 +1688,191 @@ export default function AddProductForm({ isOpen, onClose, onProductCreated }: Ad
                                         )}
                                     />
 
+                                    {/* Physical Dimensions & Unit Section */}
+                                    <div className="space-y-4">
+                                        <div className="border-t pt-4">
+                                            <h3 className="text-lg font-medium mb-4">Physical Dimensions & Unit</h3>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <FormField
+                                                    control={form.control}
+                                                    name="weight"
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Weight (kg)</FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.001"
+                                                                    placeholder="0.000"
+                                                                    value={field.value ?? ''}
+                                                                    onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+
+                                                <FormField
+                                                    control={form.control}
+                                                    name="unit_id"
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Default Unit</FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                                <FormControl>
+                                                                    <SelectTrigger>
+                                                                        <SelectValue placeholder="Select unit" />
+                                                                    </SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent>
+                                                                    {units.map((unit) => (
+                                                                        <SelectItem key={unit.id} value={unit.id.toString()}>
+                                                                            {unit.name} ({unit.code})
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            </div>
+
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <FormField
+                                                    control={form.control}
+                                                    name="length"
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Length (cm)</FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    placeholder="0.00"
+                                                                    value={field.value ?? ''}
+                                                                    onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+
+                                                <FormField
+                                                    control={form.control}
+                                                    name="width"
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Width (cm)</FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    placeholder="0.00"
+                                                                    value={field.value ?? ''}
+                                                                    onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+
+                                                <FormField
+                                                    control={form.control}
+                                                    name="height"
+                                                    render={({ field }) => (
+                                                        <FormItem>
+                                                            <FormLabel>Height (cm)</FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    placeholder="0.00"
+                                                                    value={field.value ?? ''}
+                                                                    onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            </div>
+
+                                            <FormField
+                                                control={form.control}
+                                                name="volume_m3"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Volume (m³)</FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                type="number"
+                                                                step="0.0001"
+                                                                placeholder="0.0000"
+                                                                value={field.value ?? ''}
+                                                                onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value) || 0)}
+                                                            />
+                                                        </FormControl>
+                                                        <FormDescription>
+                                                            Automatically calculated from length × width × height if not specified
+                                                        </FormDescription>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                    </div>
+
                                     {/* Vehicle Compatibility Section */}
                                     <div className="space-y-4">
                                         <div className="border-t pt-4">
                                             <h3 className="text-lg font-medium mb-4">Vehicle Compatibility</h3>
 
+                                            {/* General Product Checkbox */}
+                                            <FormField
+                                                control={form.control}
+                                                name="is_general_product"
+                                                render={({ field }) => (
+                                                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                                        <FormControl>
+                                                            <Checkbox
+                                                                checked={field.value}
+                                                                onCheckedChange={(checked) => {
+                                                                    field.onChange(checked);
+                                                                    if (checked) {
+                                                                        // Clear compatibility options when general is selected
+                                                                        form.setValue('compatibility_group_id', '');
+                                                                        form.setValue('compatible_variants', []);
+                                                                        setCompatibilityMode('none');
+                                                                        setSelectedCarMaker('');
+                                                                        setSelectedCarModel('');
+                                                                        setSelectedYear(undefined);
+                                                                        setSelectedVariants([]);
+                                                                        setCarModels([]);
+                                                                        setCarVariants([]);
+                                                                        setAvailableYears([]);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </FormControl>
+                                                        <div className="space-y-1 leading-none">
+                                                            <FormLabel>
+                                                                General Product (Available for all vehicles)
+                                                            </FormLabel>
+                                                            <FormDescription>
+                                                                Check this if the product is compatible with all vehicle models and variants
+                                                            </FormDescription>
+                                                        </div>
+                                                    </FormItem>
+                                                )}
+                                            />
+
                                             {/* Three mutually exclusive options */}
                                             <div className="space-y-6">
-                                                {/* Option 0: No Vehicle Compatibility */}
-                                                <div className="flex items-center space-x-2">
-                                                    <input
-                                                        type="radio"
-                                                        id="no-compatibility"
-                                                        name="compatibility-option"
-                                                        checked={compatibilityMode === 'none'}
-                                                        onChange={() => {
-                                                            setCompatibilityMode('none');
-                                                            // Clear both options
-                                                            form.setValue('compatibility_group_id', '');
-                                                            form.setValue('compatible_variants', []);
-                                                            setSelectedCarMaker('');
-                                                            setSelectedCarModel('');
-                                                            setSelectedYear(undefined);
-                                                            setSelectedVariants([]);
-                                                            setCarModels([]);
-                                                            setCarVariants([]);
-                                                            setAvailableYears([]);
-                                                        }}
-                                                        className="w-4 h-4"
-                                                    />
-                                                    <label htmlFor="no-compatibility" className="text-sm font-medium">
-                                                        No Vehicle Compatibility (General Product)
-                                                    </label>
-                                                </div>
 
                                                 <div className="space-y-6">
                                                     {/* Option 1: Compatibility Group */}

@@ -14,6 +14,8 @@ const MANUFACTURING_BASE = ((import.meta as any).env?.VITE_API_BASE as string) |
 const AUTH_BASE = `${API_ROOT}/api/auth`;
 // Shop API base for admin pages
 const SHOP_BASE = `${API_ROOT}/api/shop`;
+// Inventory API base (inventory is under shop/)
+const INVENTORY_BASE = `${API_ROOT}/api/shop/inventory`;
 // Finance API base
 const FINANCE_BASE = `${API_ROOT}/api/finance`;
 // Purchase API base
@@ -58,7 +60,19 @@ export function clearTokens() {
 
 function authHeaders(): HeadersInit {
   const t = getTokens();
-  return t?.access ? { Authorization: `Bearer ${t.access}` } as Record<string, string> : {} as Record<string, string>;
+  const headers: Record<string, string> = {};
+
+  if (t?.access) {
+    headers['Authorization'] = `Bearer ${t.access}`;
+  }
+
+  // Add organization context if available
+  const orgId = localStorage.getItem('dev_organization_id');
+  if (orgId) {
+    headers['X-Organization-ID'] = orgId;
+  }
+
+  return headers;
 }
 
 function toHeaders(init?: HeadersInit): Headers {
@@ -146,6 +160,15 @@ export const shopApi = {
   patch: <T>(path: string, body: unknown) => request<T>(SHOP_BASE, path, { method: "PATCH", body: JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(SHOP_BASE, path, { method: "DELETE" }),
   postForm: <T>(path: string, form: FormData) => request<T>(SHOP_BASE, path, { method: "POST", body: form }),
+};
+
+export const inventoryApi = {
+  get: <T>(path: string) => request<T>(INVENTORY_BASE, path),
+  post: <T>(path: string, body: unknown) => request<T>(INVENTORY_BASE, path, { method: "POST", body: JSON.stringify(body) }),
+  put: <T>(path: string, body: unknown) => request<T>(INVENTORY_BASE, path, { method: "PUT", body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) => request<T>(INVENTORY_BASE, path, { method: "PATCH", body: JSON.stringify(body) }),
+  del: <T>(path: string) => request<T>(INVENTORY_BASE, path, { method: "DELETE" }),
+  postForm: <T>(path: string, form: FormData) => request<T>(INVENTORY_BASE, path, { method: "POST", body: form }),
 };
 
 export const financeApi = {
@@ -920,7 +943,7 @@ export const shopProductsApi = {
 
 export const shopCategoriesApi = {
   list: async () => {
-    const response = await shopApi.get<ShopCategory[]>('/shop-product-category-list/');
+    const response = await shopApi.get<ShopCategory[]>('/shop-product-category-list/?no_pagination=true');
     return Array.isArray(response) ? response : [];
   },
 };
@@ -1085,3 +1108,221 @@ export interface Organization {
   created_at: string;
   updated_at: string;
 }
+
+// ==================== INVENTORY TYPES ====================
+
+export interface Unit {
+  id: number;
+  name: string;
+  code: string;
+  description?: string;
+  is_decimal: boolean;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  code: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pin_code?: string;
+  contact_person?: string;
+  contact_number?: string;
+  organization?: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  total_racks?: number;
+  total_inventory_items?: number;
+}
+
+export interface Rack {
+  id: string;
+  warehouse: string;
+  rack_number: string;
+  row_count: number;
+  column_count: number;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  total_cells?: number;
+  inventory_count?: number;
+  // Related objects (populated by backend)
+  warehouse_details?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+}
+
+export interface InventoryEntry {
+  id: string;
+  product: string;
+  product_variant?: string;
+  warehouse: string;
+  rack: string;
+  row: number;
+  column: number;
+  quantity: number;
+  unit?: number;
+  created_at: string;
+  updated_at: string;
+  location_code?: string;
+  // Related objects (populated by backend)
+  product_details?: {
+    title: string;
+    product_id: string;
+    weight?: number;
+    length?: number;
+    width?: number;
+    height?: number;
+    volume_m3?: number;
+  };
+  product_variant_details?: {
+    title: string;
+    variant_id: string;
+  };
+  warehouse_details?: {
+    name: string;
+    code: string;
+  };
+  rack_details?: {
+    rack_number: string;
+  };
+  unit_details?: {
+    name: string;
+    code: string;
+  };
+}
+
+// ==================== INVENTORY API FUNCTIONS ====================
+
+export const inventoryApiFunctions = {
+  // Units
+  units: {
+    list: () => inventoryApi.get<Unit[]>('/units/'),
+    get: (id: number) => inventoryApi.get<Unit>(`/units/${id}/`),
+    create: (data: Partial<Unit>) => inventoryApi.post<Unit>('/units/', data),
+    update: (id: number, data: Partial<Unit>) => inventoryApi.put<Unit>(`/units/${id}/`, data),
+    delete: (id: number) => inventoryApi.del(`/units/${id}/`),
+  },
+
+  // Warehouses
+  warehouses: {
+    list: () => inventoryApi.get<Warehouse[]>('/warehouses/'),
+    get: (id: string) => inventoryApi.get<Warehouse>(`/warehouses/${id}/`),
+    create: (data: Partial<Warehouse>) => inventoryApi.post<Warehouse>('/warehouses/', data),
+    update: (id: string, data: Partial<Warehouse>) => inventoryApi.put<Warehouse>(`/warehouses/${id}/`, data),
+    delete: (id: string) => inventoryApi.del(`/warehouses/${id}/`),
+    inventorySummary: (id: string) => inventoryApi.get<{
+      warehouse: Warehouse;
+      inventory_stats: {
+        total_entries: number;
+        total_quantity: number;
+        total_products: number;
+      };
+      rack_stats: {
+        total_racks: number;
+        total_cells: number;
+      };
+    }>(`/warehouses/${id}/inventory_summary/`),
+  },
+
+  // Racks
+  racks: {
+    list: (params?: Record<string, any>) => {
+      const searchParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            searchParams.append(key, value.toString());
+          }
+        });
+      }
+      const url = searchParams.toString() ? `/racks/?${searchParams.toString()}` : '/racks/';
+      return inventoryApi.get<Rack[]>(url);
+    },
+    get: (id: string) => inventoryApi.get<Rack>(`/racks/${id}/`),
+    create: (data: Partial<Rack>) => inventoryApi.post<Rack>('/racks/', data),
+    update: (id: string, data: Partial<Rack>) => inventoryApi.put<Rack>(`/racks/${id}/`, data),
+    delete: (id: string) => inventoryApi.del(`/racks/${id}/`),
+    inventory: (id: string) => inventoryApi.get<InventoryEntry[]>(`/racks/${id}/inventory/`),
+  },
+
+  // Inventory Entries
+  inventory: {
+    baseUrl: INVENTORY_BASE,
+    list: (params?: Record<string, any>) => {
+      const searchParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            searchParams.append(key, value.toString());
+          }
+        });
+      }
+      const queryString = searchParams.toString();
+      return inventoryApi.get<InventoryEntry[]>(`/inventory/${queryString ? `?${queryString}` : ''}`);
+    },
+    get: (id: string) => inventoryApi.get<InventoryEntry>(`/inventory/${id}/`),
+    create: (data: Partial<InventoryEntry>) => inventoryApi.post<InventoryEntry>('/inventory/', data),
+    update: (id: string, data: Partial<InventoryEntry>) => inventoryApi.put<InventoryEntry>(`/inventory/${id}/`, data),
+    delete: (id: string) => inventoryApi.del(`/inventory/${id}/`),
+    byProduct: (productId: string) => inventoryApi.get<{
+      product_id: string;
+      total_quantity: number;
+      entries: InventoryEntry[];
+    }>(`/inventory/by_product/?product_id=${productId}`),
+    byWarehouse: (warehouseId?: string) => {
+      const query = warehouseId ? `?warehouse_id=${warehouseId}` : '';
+      return inventoryApi.get<Array<{
+        warehouse__name: string;
+        warehouse__code: string;
+        product__title: string;
+        product_id: string;
+        total_quantity: number;
+        entry_count: number;
+      }>>(`/inventory/by_warehouse/${query}`);
+    },
+    lowStock: (threshold = 10) => inventoryApi.get<Array<{
+      product__title: string;
+      product__product_id: string;
+      product_id: string;
+      total_quantity: number;
+    }>>(`/inventory/low_stock/?threshold=${threshold}`),
+    bulkCreate: (entries: Partial<InventoryEntry>[]) => inventoryApi.post<InventoryEntry[]>('/inventory/bulk_create/', { entries }),
+    adjustQuantity: (id: string, adjustment: number) => inventoryApi.post<{
+      message: string;
+      entry: InventoryEntry;
+    }>(`/inventory/${id}/adjust_quantity/`, { adjustment }),
+    shippingReport: (params?: Record<string, any>) => {
+      const searchParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            searchParams.append(key, value.toString());
+          }
+        });
+      }
+      const queryString = searchParams.toString();
+      return inventoryApi.get<{
+        total_items: number;
+        items: Array<{
+          weight_kg?: number;
+          length_cm?: number;
+          width_cm?: number;
+          height_cm?: number;
+          volume_m3?: number;
+          quantity: number;
+          unit?: string;
+          location_code: string;
+          product_title: string;
+        }>;
+      }>(`/inventory/shipping_report/${queryString ? `?${queryString}` : ''}`);
+    },
+  },
+};

@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, Calculator, ShoppingCart, ArrowLeft, Package, LogOut, Search, Loader2, PlusCircle } from "lucide-react";
+import { Building2, Calculator, ShoppingCart, ArrowLeft, Package, LogOut, Search, Loader2, PlusCircle, Warehouse } from "lucide-react";
 import React, { useEffect, useState } from 'react';
 import { organizationsApi, Organization } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -113,6 +113,9 @@ export default function AppSelection() {
             case 'shop-admin':
                 navigate('/user-admin');
                 break;
+            case 'inventory':
+                navigate('/inventory');
+                break;
             case 'search-parts':
                 navigate('/search-parts');
                 break;
@@ -157,6 +160,15 @@ export default function AppSelection() {
             bgColor: 'bg-indigo-50',
             iconColor: 'text-indigo-600',
             hoverBg: 'hover:bg-indigo-100'
+        },
+        {
+            id: 'inventory',
+            name: 'Inventory',
+            icon: Warehouse,
+            color: 'purple',
+            bgColor: 'bg-purple-50',
+            iconColor: 'text-purple-600',
+            hoverBg: 'hover:bg-purple-100'
         },
         {
             id: 'search-parts',
@@ -282,7 +294,7 @@ export default function AppSelection() {
                             </div>
                         ) : (
                             // Existing App Selection Cards
-                            <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-8 mb-12">
                                 {apps.map((app) => {
                                     const IconComponent = app.icon;
                                     return (
