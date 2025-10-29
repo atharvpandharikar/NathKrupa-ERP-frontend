@@ -227,7 +227,7 @@ export default function CustomerList() {
                 );
                 console.log('API Response:', response);
 
-                if (response.error) {
+                if (response.error === true) {
                     throw new Error('Failed to fetch customers');
                 }
 

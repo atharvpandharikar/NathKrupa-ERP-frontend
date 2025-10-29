@@ -20,24 +20,14 @@ const INVENTORY_BASE = `${API_ROOT}/api/shop/inventory`;
 const FINANCE_BASE = `${API_ROOT}/api/finance`;
 // Purchase API base
 const PURCHASE_BASE = `${API_ROOT}/api/purchase`;
-export const COMPANIES_BASE = `${API_ROOT}/api/companies`; // New base for organizations
-
-type Tokens = { access: string; refresh: string; activeOrganizationId?: number };
+type Tokens = { access: string; refresh: string };
 
 const TOKEN_KEY = "nk:tokens";
-
-const ACTIVE_ORGANIZATION_KEY = "nk:activeOrganizationId"; // New key for active organization ID
 
 export function getTokens(): Tokens | null {
   try {
     const raw = localStorage.getItem(TOKEN_KEY);
     const tokens = raw ? (JSON.parse(raw) as Tokens) : null;
-    if (tokens) {
-      const activeOrganizationId = localStorage.getItem(ACTIVE_ORGANIZATION_KEY);
-      if (activeOrganizationId) {
-        tokens.activeOrganizationId = parseInt(activeOrganizationId, 10);
-      }
-    }
     return tokens;
   } catch {
     return null;
@@ -46,16 +36,10 @@ export function getTokens(): Tokens | null {
 
 export function setTokens(tokens: Tokens) {
   localStorage.setItem(TOKEN_KEY, JSON.stringify(tokens));
-  if (tokens.activeOrganizationId) {
-    localStorage.setItem(ACTIVE_ORGANIZATION_KEY, tokens.activeOrganizationId.toString());
-  } else {
-    localStorage.removeItem(ACTIVE_ORGANIZATION_KEY);
-  }
 }
 
 export function clearTokens() {
   localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(ACTIVE_ORGANIZATION_KEY); // Clear active organization on logout
 }
 
 function authHeaders(): HeadersInit {
@@ -64,12 +48,6 @@ function authHeaders(): HeadersInit {
 
   if (t?.access) {
     headers['Authorization'] = `Bearer ${t.access}`;
-  }
-
-  // Add organization context if available
-  const orgId = localStorage.getItem('dev_organization_id');
-  if (orgId) {
-    headers['X-Organization-ID'] = orgId;
   }
 
   return headers;
@@ -285,7 +263,7 @@ export const purchaseApiBase = {
 };
 
 export const authApi = {
-  async login(email: string, password: string, device_id_hash?: string): Promise<Tokens & { organization?: Organization }> {
+  async login(email: string, password: string, device_id_hash?: string): Promise<Tokens> {
     const res = await fetch(`${AUTH_BASE}/login/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -295,10 +273,10 @@ export const authApi = {
       const text = await res.text();
       throw new Error(text || `HTTP ${res.status}`);
     }
-    const data = (await res.json()) as { tokens: Tokens; organization?: Organization };
+    const data = (await res.json()) as { tokens: Tokens };
     const tokens = data.tokens;
     setTokens(tokens);
-    return { ...tokens, organization: data.organization };
+    return tokens;
   },
   async logout() {
     clearTokens();
@@ -948,6 +926,37 @@ export const shopCategoriesApi = {
   },
 };
 
+// Shop Customers API
+export interface ShopCustomer {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name?: string;
+  phone_number?: string;
+  organization_name?: string;
+  billing_address_1?: string;
+  billing_address_2?: string;
+  city?: string;
+  state?: string;
+  pin_code?: string;
+  gst_no?: string;
+  source: 'user_auth' | 'quotation';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  full_name?: string;
+}
+
+export const shopCustomersApi = {
+  list: async (search?: string) => {
+    const url = search
+      ? `/shop/customers/?search=${encodeURIComponent(search)}`
+      : '/shop/customers/';
+    const response = await shopApi.get<{ error: boolean; count: number; data: ShopCustomer[] }>(url);
+    return response.error ? [] : response.data;
+  },
+};
+
 // Category Products API
 export const categoryProductsApi = {
   getProducts: async (params: {
@@ -1094,21 +1103,6 @@ export const testModeApi = {
   },
 };
 
-export const organizationsApi = {
-  list: () => request<Organization[]>(COMPANIES_BASE, '/organizations/'),
-  create: (data: { name: string; address?: string }) => request<Organization>(COMPANIES_BASE, '/organizations/', { method: "POST", body: JSON.stringify(data) }),
-  select: (organization_id: number) => request<{ message: string }>(COMPANIES_BASE, `/organizations/${organization_id}/select_organization/`, { method: "POST", body: JSON.stringify({ organization_id }) }),
-};
-
-// New type for Organization
-export interface Organization {
-  id: number;
-  name: string;
-  address?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 // ==================== INVENTORY TYPES ====================
 
 export interface Unit {
@@ -1131,7 +1125,6 @@ export interface Warehouse {
   pin_code?: string;
   contact_person?: string;
   contact_number?: string;
-  organization?: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;

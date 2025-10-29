@@ -323,6 +323,7 @@ export default function NewBill() {
                                     step="0.01"
                                     value={formData.discount}
                                     onChange={(e) => setFormData({ ...formData, discount: parseFloat(e.target.value) || 0 })}
+                                    onWheel={(e) => e.currentTarget.blur()}
                                 />
                             </div>
                         </div>

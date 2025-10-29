@@ -1,7 +1,6 @@
 import React, { createContext, useContext, ReactNode, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { authApi, getTokens, setTokens, clearTokens, organizationsApi, Organization } from '@/lib/api';
-import { getOrganizationFromSubdomain } from '@/lib/organization';
+import { authApi, getTokens, setTokens, clearTokens } from '@/lib/api';
 
 // Define Auth Context
 interface AuthContextProps {
@@ -17,11 +16,6 @@ interface AuthContextProps {
     };
     sessionExpired: boolean;
     setSessionExpired: (expired: boolean) => void;
-    activeOrganizationId?: number;
-    setActiveOrganizationId: (id: number | undefined) => void;
-    currentOrganization: Organization | null;
-    userOrganizations: Organization[];
-    switchToOrganization: (organization: Organization) => void;
     isSuperuser: boolean;
 }
 
@@ -51,17 +45,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const [sessionExpired, setSessionExpired] = useState(false);
-    const [activeOrganizationId, _setActiveOrganizationId] = useState<number | undefined>(getTokens()?.activeOrganizationId);
-    const [currentOrganization, setCurrentOrganization] = useState<Organization | null>(null);
-    const [userOrganizations, setUserOrganizations] = useState<Organization[]>([]);
-
-    const setActiveOrganizationId = (id: number | undefined) => {
-        _setActiveOrganizationId(id);
-        const tokens = getTokens();
-        if (tokens) {
-            setTokens({ ...tokens, activeOrganizationId: id });
-        }
-    };
 
     // Check if user is authenticated
     const isAuthenticated = (): boolean => {
@@ -127,31 +110,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const response = await authApi.login(email, password, device_id_hash);
             setSessionExpired(false);
 
-            // Try to load user organizations (optional - don't fail if it errors)
-            try {
-                const orgs = await organizationsApi.list();
-                setUserOrganizations(orgs);
-
-                // Set the active organization ID from the login response or first available org
-                if (response.organization?.id) {
-                    setActiveOrganizationId(response.organization.id);
-                    setCurrentOrganization(response.organization);
-                } else if (orgs.length > 0) {
-                    // If no organization in response but user has organizations, use the first one
-                    setActiveOrganizationId(orgs[0].id);
-                    setCurrentOrganization(orgs[0]);
-                } else {
-                    setActiveOrganizationId(undefined);
-                    setCurrentOrganization(null);
-                }
-            } catch (orgError) {
-                console.warn('Could not load organizations:', orgError);
-                // Continue anyway - multi-tenancy is optional
-                setActiveOrganizationId(undefined);
-                setCurrentOrganization(null);
-            }
-
-            // Redirect to the intended page or dashboard (not app-selection)
+            // Redirect to the intended page or dashboard
             const from = (location.state as any)?.from?.pathname || '/dashboard';
             navigate(from, { replace: true });
         } catch (error: any) {
@@ -163,25 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = () => {
         clearTokens();
         setSessionExpired(false);
-        setCurrentOrganization(null);
-        setUserOrganizations([]);
         navigate('/login', { replace: true });
-    };
-
-    // Function to switch organization
-    const switchToOrganizationHandler = (organization: Organization) => {
-        // Update local state
-        setActiveOrganizationId(organization.id);
-        setCurrentOrganization(organization);
-
-        // Update tokens with new organization
-        const tokens = getTokens();
-        if (tokens) {
-            setTokens({ ...tokens, activeOrganizationId: organization.id });
-        }
-
-        // Reload the page to apply new organization context
-        window.location.reload();
     };
 
     // Check if user is superuser
@@ -246,11 +187,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 currentUser: getCurrentUser(),
                 sessionExpired,
                 setSessionExpired,
-                activeOrganizationId,
-                setActiveOrganizationId,
-                currentOrganization,
-                userOrganizations,
-                switchToOrganization: switchToOrganizationHandler,
                 isSuperuser,
             }}
         >

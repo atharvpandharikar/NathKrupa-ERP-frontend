@@ -40,11 +40,13 @@ import {
     Trash2,
     Building2,
     User,
-    CreditCard
+    CreditCard,
+    Save
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { purchaseApi, type Vendor } from "@/lib/api";
+import { purchaseApi, financeApi, type Vendor } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { Combobox } from "@/components/ui/combobox";
 
 interface VendorWithStats extends Vendor {
     total_bill_amount: number;
@@ -98,6 +100,28 @@ export default function Vendors() {
         bank_details: [{ bank_name: '', ifsc_code: '', branch: '', account_number: '' }]
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [selectedVendorForPayment, setSelectedVendorForPayment] = useState<VendorWithStats | null>(null);
+    const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+    const [paymentLoading, setPaymentLoading] = useState(false);
+    const [accounts, setAccounts] = useState<any[]>([]);
+    const [vendorsList, setVendorsList] = useState<Vendor[]>([]);
+    const [useCustomVendor, setUseCustomVendor] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [paymentForm, setPaymentForm] = useState({
+        account: '',
+        transaction_type: 'Debit',
+        amount: 0,
+        from_party: '',
+        to_party: '',
+        vendor: '',
+        custom_vendor: '',
+        purpose: '',
+        bill_no: '',
+        utr_number: '',
+        time: new Date().toISOString().slice(0, 16),
+        create_finance_transaction: true,
+    });
 
     useEffect(() => {
         const fetchVendors = async () => {
@@ -144,7 +168,28 @@ export default function Vendors() {
             }
         };
 
+        const fetchAccounts = async () => {
+            try {
+                const data = await financeApi.get<any[]>('/accounts/');
+                setAccounts(data);
+            } catch (error) {
+                console.error('Error fetching accounts:', error);
+            }
+        };
+
+        const fetchVendorsList = async () => {
+            try {
+                const data = await purchaseApi.vendors.list();
+                setVendorsList(data);
+            } catch (error) {
+                console.error('Error fetching vendors:', error);
+                setVendorsList([]);
+            }
+        };
+
         fetchVendors();
+        fetchAccounts();
+        fetchVendorsList();
     }, [toast]);
 
     const filteredAndSortedVendors = vendors
@@ -292,7 +337,7 @@ export default function Vendors() {
             setIsSubmitting(true);
 
             // Validate required fields
-            if (!newVendor.name || !newVendor.email || !newVendor.gst_number) {
+            if (!newVendor.name || !newVendor.email) {
                 toast({
                     title: "Validation Error",
                     description: "Please fill in all required fields.",
@@ -390,6 +435,170 @@ export default function Vendors() {
         }
     };
 
+    const openPaymentDialog = (vendor: VendorWithStats) => {
+        setSelectedVendorForPayment(vendor);
+        setPaymentForm({
+            account: '',
+            transaction_type: 'Debit',
+            amount: 0,
+            from_party: '',
+            to_party: vendor.name,
+            vendor: vendor.id.toString(),
+            custom_vendor: '',
+            purpose: `Payment to ${vendor.name}`,
+            bill_no: '',
+            utr_number: '',
+            time: new Date().toISOString().slice(0, 16),
+            create_finance_transaction: true,
+        });
+        setUseCustomVendor(false);
+        setSelectedImage(null);
+        setImagePreview(null);
+        setIsPaymentDialogOpen(true);
+    };
+
+    const handlePaymentInputChange = (field: string, value: any) => {
+        setPaymentForm(prev => ({
+            ...prev,
+            [field]: value
+        }));
+    };
+
+    const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            setSelectedImage(file);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setImagePreview(e.target?.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleRemoveImage = () => {
+        setSelectedImage(null);
+        setImagePreview(null);
+    };
+
+    const handlePaymentSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedVendorForPayment) return;
+
+        // Validate amount
+        if (paymentForm.amount <= 0) {
+            toast({
+                title: "Validation Error",
+                description: "Payment amount must be greater than zero.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setPaymentLoading(true);
+        try {
+            // Step 1: Add purchase payment to vendor
+            const purchasePaymentData = {
+                amount: paymentForm.amount,
+                payment_date: paymentForm.time.slice(0, 10),
+                mode: 'Bank',
+                note: paymentForm.purpose,
+            };
+
+            const paymentResponse = await purchaseApi.vendors.addPayment(selectedVendorForPayment.id, purchasePaymentData);
+            console.log('Purchase payment added:', paymentResponse);
+
+            // Step 2: Create finance transaction if enabled
+            if (paymentForm.create_finance_transaction && paymentForm.account) {
+                const transactionData = {
+                    ...paymentForm,
+                    account: parseInt(paymentForm.account),
+                    amount: parseFloat(paymentForm.amount.toString()),
+                    time: new Date(paymentForm.time).toISOString(),
+                    // Handle vendor selection for debit transactions
+                    ...(paymentForm.transaction_type === 'Debit' && {
+                        ...(useCustomVendor && paymentForm.custom_vendor
+                            ? { to_party: paymentForm.custom_vendor }
+                            : paymentForm.vendor
+                                ? {
+                                    vendor: parseInt(paymentForm.vendor),
+                                    to_party: paymentForm.to_party // Keep the to_party field
+                                }
+                                : {}
+                        )
+                    }),
+                    // Clear party fields that shouldn't be sent
+                    ...(paymentForm.transaction_type === 'Credit' && { to_party: '' }),
+                };
+
+                await financeApi.createTransactionWithImage(transactionData, selectedImage || undefined);
+                console.log('Finance transaction created');
+            }
+
+            // Step 3: Refresh vendors list
+            const response = await purchaseApi.vendors.list();
+            const vendorsWithStats = await Promise.all(
+                response.map(async (vendor) => {
+                    try {
+                        const summary = await purchaseApi.vendors.paymentSummary(vendor.id);
+                        return {
+                            ...vendor,
+                            total_bill_amount: summary.total_bill_amount || 0,
+                            total_paid_amount: summary.total_paid_amount || 0,
+                            total_outstanding: summary.total_outstanding || 0,
+                            total_bills: summary.total_bills || 0,
+                        };
+                    } catch (error) {
+                        console.error(`Failed to fetch summary for vendor ${vendor.id}:`, error);
+                        return {
+                            ...vendor,
+                            total_bill_amount: 0,
+                            total_paid_amount: 0,
+                            total_outstanding: 0,
+                            total_bills: 0,
+                        };
+                    }
+                })
+            );
+            setVendors(vendorsWithStats);
+
+            toast({
+                title: "Success",
+                description: "Payment added successfully!",
+            });
+
+            // Reset form and close dialog
+            setSelectedVendorForPayment(null);
+            setPaymentForm({
+                account: '',
+                transaction_type: 'Debit',
+                amount: 0,
+                from_party: '',
+                to_party: '',
+                vendor: '',
+                custom_vendor: '',
+                purpose: '',
+                bill_no: '',
+                utr_number: '',
+                time: new Date().toISOString().slice(0, 16),
+                create_finance_transaction: true,
+            });
+            setSelectedImage(null);
+            setImagePreview(null);
+            setUseCustomVendor(false);
+            setIsPaymentDialogOpen(false);
+        } catch (error) {
+            console.error('Error adding payment:', error);
+            toast({
+                title: "Error",
+                description: "Failed to add payment. Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setPaymentLoading(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="p-6">
@@ -454,7 +663,7 @@ export default function Vendors() {
                                     </div>
 
                                     <div>
-                                        <Label htmlFor="gst">GST Number *</Label>
+                                        <Label htmlFor="gst">GST Number</Label>
                                         <Input
                                             id="gst"
                                             value={newVendor.gst_number}
@@ -841,6 +1050,13 @@ export default function Vendors() {
                                                 >
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => openPaymentDialog(vendor)}
+                                                >
+                                                    <CreditCard className="h-4 w-4" />
+                                                </Button>
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -850,6 +1066,247 @@ export default function Vendors() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Payment Dialog */}
+            <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Add Payment</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handlePaymentSubmit} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="account">Account *</Label>
+                                <Select value={paymentForm.account} onValueChange={(value) => handlePaymentInputChange('account', value)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select account" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {accounts.map((account) => (
+                                            <SelectItem key={account.id} value={account.id.toString()}>
+                                                {account.nickname} ({account.account_type})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="transaction_type">Transaction Type *</Label>
+                                <Select value={paymentForm.transaction_type} onValueChange={(value) => handlePaymentInputChange('transaction_type', value)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Credit">Credit</SelectItem>
+                                        <SelectItem value="Debit">Debit</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="amount">Amount *</Label>
+                                <Input
+                                    id="amount"
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    value={paymentForm.amount}
+                                    onChange={(e) => handlePaymentInputChange('amount', parseFloat(e.target.value) || 0)}
+                                    placeholder="0.00"
+                                    required
+                                />
+                                {paymentForm.amount <= 0 && (
+                                    <p className="text-sm text-red-600">Amount must be greater than zero</p>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="time">Date & Time *</Label>
+                                <Input
+                                    id="time"
+                                    type="datetime-local"
+                                    value={paymentForm.time}
+                                    onChange={(e) => handlePaymentInputChange('time', e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="purpose">Purpose *</Label>
+                            <Textarea
+                                id="purpose"
+                                value={paymentForm.purpose}
+                                onChange={(e) => handlePaymentInputChange('purpose', e.target.value)}
+                                placeholder="Describe the purpose of this transaction"
+                                required
+                                rows={3}
+                            />
+                        </div>
+
+                        {/* Party fields based on transaction type */}
+                        {paymentForm.transaction_type === 'Credit' && (
+                            <div className="space-y-2">
+                                <Label htmlFor="from_party">From Party *</Label>
+                                <Input
+                                    id="from_party"
+                                    value={paymentForm.from_party}
+                                    onChange={(e) => handlePaymentInputChange('from_party', e.target.value)}
+                                    placeholder="Who is paying/sending money"
+                                    required
+                                />
+                            </div>
+                        )}
+
+                        {paymentForm.transaction_type === 'Debit' && (
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="vendor">Vendor *</Label>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center space-x-2">
+                                            <input
+                                                type="checkbox"
+                                                id="useCustomVendor"
+                                                checked={useCustomVendor}
+                                                onChange={(e) => {
+                                                    setUseCustomVendor(e.target.checked);
+                                                    if (e.target.checked) {
+                                                        // Clear vendor selection when using custom
+                                                        handlePaymentInputChange('vendor', '');
+                                                        handlePaymentInputChange('to_party', paymentForm.custom_vendor);
+                                                    } else {
+                                                        // Clear custom vendor when using vendor selection
+                                                        handlePaymentInputChange('custom_vendor', '');
+                                                        // Set to_party to selected vendor name
+                                                        const selectedVendor = vendorsList.find(v => v.id.toString() === paymentForm.vendor);
+                                                        if (selectedVendor) {
+                                                            handlePaymentInputChange('to_party', selectedVendor.name);
+                                                        }
+                                                    }
+                                                }}
+                                                className="rounded"
+                                            />
+                                            <Label htmlFor="useCustomVendor" className="text-sm">
+                                                Use custom vendor name
+                                            </Label>
+                                        </div>
+
+                                        {useCustomVendor ? (
+                                            <Input
+                                                id="custom_vendor"
+                                                value={paymentForm.custom_vendor}
+                                                onChange={(e) => {
+                                                    handlePaymentInputChange('custom_vendor', e.target.value);
+                                                    handlePaymentInputChange('to_party', e.target.value);
+                                                }}
+                                                placeholder="Enter vendor name"
+                                                required
+                                            />
+                                        ) : (
+                                            <Combobox
+                                                value={paymentForm.vendor}
+                                                onChange={(value) => {
+                                                    handlePaymentInputChange('vendor', value);
+                                                    // Auto-update to_party when vendor is selected
+                                                    const selectedVendor = vendorsList.find(v => v.id.toString() === value);
+                                                    if (selectedVendor) {
+                                                        handlePaymentInputChange('to_party', selectedVendor.name);
+                                                    }
+                                                }}
+                                                options={vendorsList.map(vendor => ({
+                                                    label: `${vendor.name} ${vendor.gst_number ? `(${vendor.gst_number})` : ''}`,
+                                                    value: vendor.id.toString()
+                                                }))}
+                                                placeholder="Select vendor"
+                                                searchPlaceholder="Search vendors..."
+                                                emptyText="No vendors found"
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="to_party">To *</Label>
+                                    <Input
+                                        id="to_party"
+                                        value={paymentForm.to_party}
+                                        onChange={(e) => handlePaymentInputChange('to_party', e.target.value)}
+                                        placeholder="Who is receiving the payment (can be different from vendor)"
+                                        required
+                                    />
+                                    <p className="text-xs text-gray-500">
+                                        This can be different from the vendor if payment is made to a different person/account
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="bill_no">Bill Number</Label>
+                                <Input
+                                    id="bill_no"
+                                    value={paymentForm.bill_no}
+                                    onChange={(e) => handlePaymentInputChange('bill_no', e.target.value)}
+                                    placeholder="Reference bill number"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="utr_number">UTR/Reference Number</Label>
+                                <Input
+                                    id="utr_number"
+                                    value={paymentForm.utr_number}
+                                    onChange={(e) => handlePaymentInputChange('utr_number', e.target.value)}
+                                    placeholder="Bank UTR, cheque no, etc."
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="transaction_image">Transaction Image (Optional)</Label>
+                            <div className="space-y-2">
+                                <input
+                                    id="transaction_image"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageSelect}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                />
+                                {imagePreview && (
+                                    <div className="relative inline-block">
+                                        <img
+                                            src={imagePreview}
+                                            alt="Preview"
+                                            className="h-24 w-24 object-cover rounded border"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleRemoveImage}
+                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs hover:bg-red-600"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end space-x-4 pt-4">
+                            <Button type="button" variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={paymentLoading}>
+                                <Save className="h-4 w-4 mr-2" />
+                                {paymentLoading ? "Adding..." : "Add Payment"}
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -2,7 +2,6 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useMemo } from "react";
 import { useOrganization } from "@/hooks/useOrganization";
-import OrganizationHeader from "@/components/OrganizationHeader";
 
 export function Navbar() {
   const location = useLocation();
@@ -73,7 +72,6 @@ export function Navbar() {
         <div className="text-xs sm:text-sm text-muted-foreground truncate">/ {breadcrumb}</div>
       </div>
       <nav className="flex items-center gap-3 text-sm">
-        <OrganizationHeader />
         <Link to="/quotations/generate" className="hover:underline whitespace-nowrap">Generate Quote</Link>
       </nav>
     </header>

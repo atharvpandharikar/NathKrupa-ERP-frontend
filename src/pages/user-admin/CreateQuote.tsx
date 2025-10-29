@@ -59,6 +59,9 @@ import {
     Calculator,
     Calendar,
 } from 'lucide-react';
+// Custom Components
+import { CustomerSelector } from '@/components/CustomerSelector';
+import { CustomProductInput } from '@/components/CustomProductInput';
 
 // Constants
 const TAX_OPTIONS = [12, 18, 28] as const;
@@ -118,7 +121,7 @@ const useProductSearch = () => {
                 `/shop-product-list/?search=${encodeURIComponent(query)}`
             );
 
-            if (response.error) {
+            if (response.error === true) {
                 throw new Error('Failed to fetch products');
             }
 
@@ -222,6 +225,23 @@ const ProductSelector: React.FC<{
                                 {error}
                             </div>
                         )}
+                        {!loading && !error && searchQuery && (
+                            <CommandItem
+                                onSelect={() => {
+                                    // Set custom product name
+                                    const customProduct = { productName: searchQuery } as Partial<QuoteItem>;
+                                    onProductSelect(customProduct as any, undefined);
+                                    setIsOpen(false);
+                                    setSearchQuery('');
+                                }}
+                                className="flex items-center gap-2 p-3 text-primary"
+                            >
+                                <Package className="h-4 w-4" />
+                                <span className="text-sm font-medium">
+                                    Use "{searchQuery}" as custom product
+                                </span>
+                            </CommandItem>
+                        )}
                         {!loading && !error && results.length === 0 && searchQuery && (
                             <CommandEmpty>No products found.</CommandEmpty>
                         )}
@@ -285,6 +305,7 @@ export function CreateQuote() {
         discount: '0',
         shipping_charges: '0',
     });
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [searchParams] = useSearchParams();
     const quotation_no = searchParams.get('quotation_no') || undefined;
@@ -491,9 +512,9 @@ export function CreateQuote() {
     };
 
     const getPayload = () => {
-        // Ensure all values are strings as per the required payload
+        // Include both catalog products and custom products
         const validItems = items.filter(
-            item => item.product_id && item.quantity > 0 && item.listPrice > 0,
+            item => item.quantity > 0 && item.listPrice > 0 && item.productName.trim(),
         );
 
         return {
@@ -514,10 +535,11 @@ export function CreateQuote() {
             ],
             products: validItems.map(item => ({
                 title: item.productName,
-                product_id: String(item.product_id),
+                product_id: item.product_id ? String(item.product_id) : '', // Can be empty for custom products
                 tax: String(item.taxPercentage),
                 quantity: String(item.quantity),
                 price: String(item.listPrice),
+                hsn_code: item.hsnCode || '', // Include HSN code if provided
             })),
             other: [
                 {
@@ -529,8 +551,24 @@ export function CreateQuote() {
     };
 
     const handleSubmit = async () => {
-        const payload = getPayload();
+        if (isSubmitting) return;
+
+        const payloadBase = getPayload();
+        if (payloadBase.products.length === 0) {
+            toast.error('Add at least one product to generate a quotation');
+            return;
+        }
+        if (!billTo.contact_no.trim()) {
+            toast.error('Contact number is required');
+            return;
+        }
+
+        const payload = {
+            ...payloadBase,
+            return_type: 'json',
+        };
         try {
+            setIsSubmitting(true);
             console.log('Payload to backend:', payload);
             // Build the URL for generating or updating a quotation
             const baseUrl = '/shop/generate-quotation-shop/';
@@ -540,18 +578,38 @@ export function CreateQuote() {
                     ? `${baseUrl}?quotation_no=${encodeURIComponent(quotation_no)}`
                     : baseUrl;
             console.log('Request URL:', url);
-
-            const response = await shopApi.post(url, payload);
-
-            if (response) {
-                toast.success('Quote created successfully!');
-                window.location.href = '/user-admin/quotations';
+            const response = await shopApi.post<{ error?: boolean; data?: { quotation_pdf?: string } }>(url, payload);
+            if (response.error === true) {
+                throw new Error(
+                    typeof response.data === 'string'
+                        ? response.data
+                        : 'Failed to create quotation'
+                );
             }
+
+            const data = response?.data;
+            if (data?.quotation_pdf) {
+                window.open(data.quotation_pdf, '_blank');
+            }
+
+            toast.success('Quote created successfully!');
+            localStorage.removeItem('quotation_draft');
+            window.location.href = '/user-admin/quotations';
         } catch (error) {
             console.error('Error creating quote:', error);
-            toast.error(
-                `Failed to create quote: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            );
+            let message = 'Unknown error';
+            if (error instanceof Error && error.message) {
+                try {
+                    const parsed = JSON.parse(error.message);
+                    message =
+                        parsed?.data || parsed?.detail || parsed?.message || error.message;
+                } catch {
+                    message = error.message;
+                }
+            }
+            toast.error(`Failed to create quote: ${message}`);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -597,177 +655,32 @@ export function CreateQuote() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 gap-4">
-                                {/* Org Name */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="org_name" className="text-sm font-medium">
-                                        Organization Name
-                                    </Label>
-                                    <Input
-                                        id="org_name"
-                                        placeholder="Enter organization name"
-                                        value={billTo.org_name}
-                                        onChange={event_ =>
-                                            updateBillTo('org_name', event_.target.value)
-                                        }
-                                    />
-                                </div>
+                            {/* Customer Selector Component */}
+                            <CustomerSelector
+                                billTo={billTo}
+                                onCustomerSelect={(customerData) => {
+                                    setBillTo(prev => ({ ...prev, ...customerData }));
+                                }}
+                            />
 
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="name" className="text-sm font-medium">
-                                            Customer Name *
-                                        </Label>
-                                        <Input
-                                            id="name"
-                                            placeholder="Enter customer name"
-                                            value={billTo.name}
-                                            onChange={event_ =>
-                                                updateBillTo('name', event_.target.value)
-                                            }
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="contact" className="text-sm font-medium">
-                                            Contact Number *
-                                        </Label>
-                                        <Input
-                                            id="contact"
-                                            placeholder="Enter contact number"
-                                            value={billTo.contact_no}
-                                            onChange={e => updateBillTo('contact_no', e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="email" className="text-sm font-medium">
-                                        Email Address *
-                                    </Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        placeholder="Enter email address"
-                                        value={billTo.email}
-                                        onChange={event_ =>
-                                            updateBillTo('email', event_.target.value)
-                                        }
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="address1" className="text-sm font-medium">
-                                        Billing Address Line 1 *
-                                    </Label>
-                                    <Input
-                                        id="address1"
-                                        placeholder="Enter address line 1"
-                                        value={billTo.billing_address_1}
-                                        onChange={event_ =>
-                                            updateBillTo('billing_address_1', event_.target.value)
-                                        }
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="address2" className="text-sm font-medium">
-                                        Billing Address Line 2
-                                    </Label>
-                                    <Input
-                                        id="address2"
-                                        placeholder="Enter address line 2 (optional)"
-                                        value={billTo.billing_address_2}
-                                        onChange={event_ =>
-                                            updateBillTo('billing_address_2', event_.target.value)
-                                        }
-                                    />
-                                </div>
-
-                                {/* City */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="city" className="text-sm font-medium">
-                                        City
-                                    </Label>
-                                    <Input
-                                        id="city"
-                                        placeholder="Enter city"
-                                        value={billTo.city}
-                                        onChange={event_ =>
-                                            updateBillTo('city', event_.target.value)
-                                        }
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="pincode" className="text-sm font-medium">
-                                            Pin Code *
-                                        </Label>
-                                        <Input
-                                            id="pincode"
-                                            placeholder="Pin code"
-                                            value={billTo.pin_code}
-                                            onChange={event_ =>
-                                                updateBillTo('pin_code', event_.target.value)
-                                            }
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="state" className="text-sm font-medium">
-                                            State *
-                                        </Label>
-                                        <Select
-                                            value={billTo.state}
-                                            onValueChange={value => updateBillTo('state', value)}
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Select state" />
-                                            </SelectTrigger>
-                                            <SelectContent className="h-[200px] w-full">
-                                                {INDIAN_STATES.map(state => (
-                                                    <SelectItem key={state} value={state}>
-                                                        {state}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                {/* GST No */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="gst_no" className="text-sm font-medium">
-                                        GST Number
-                                    </Label>
-                                    <Input
-                                        id="gst_no"
-                                        placeholder="Enter GST number"
-                                        value={billTo.gst_no}
-                                        onChange={event_ =>
-                                            updateBillTo('gst_no', event_.target.value)
-                                        }
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label
-                                        htmlFor="date"
-                                        className="flex items-center gap-2 text-sm font-medium"
-                                    >
-                                        <Calendar className="h-4 w-4" />
-                                        Quote Date *
-                                    </Label>
-                                    <Input
-                                        id="date"
-                                        type="date"
-                                        value={billTo.date}
-                                        onChange={event_ =>
-                                            updateBillTo('date', event_.target.value)
-                                        }
-                                    />
-                                </div>
+                            {/* Date Field */}
+                            <Separator />
+                            <div className="space-y-2">
+                                <Label
+                                    htmlFor="date"
+                                    className="flex items-center gap-2 text-sm font-medium"
+                                >
+                                    <Calendar className="h-4 w-4" />
+                                    Quote Date *
+                                </Label>
+                                <Input
+                                    id="date"
+                                    type="date"
+                                    value={billTo.date}
+                                    onChange={event_ =>
+                                        updateBillTo('date', event_.target.value)
+                                    }
+                                />
                             </div>
                         </CardContent>
                     </Card>
@@ -836,9 +749,10 @@ export function CreateQuote() {
                                     <TableHeader>
                                         <TableRow className="bg-muted/50">
                                             <TableHead className="w-12 text-center">#</TableHead>
-                                            <TableHead className="min-w-[300px]">
+                                            <TableHead className="min-w-[250px]">
                                                 Product Name
                                             </TableHead>
+                                            <TableHead className="w-28 text-center">HSN Code</TableHead>
                                             <TableHead className="w-[100px] text-center">
                                                 Qty
                                             </TableHead>
@@ -872,6 +786,18 @@ export function CreateQuote() {
                                                 </TableCell>
                                                 <TableCell className="py-4">
                                                     <Input
+                                                        placeholder="HSN Code"
+                                                        value={item.hsnCode || ''}
+                                                        onChange={e =>
+                                                            updateItem(item.id, {
+                                                                hsnCode: e.target.value,
+                                                            })
+                                                        }
+                                                        className="w-[80px] text-center"
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="py-4">
+                                                    <Input
                                                         value={item.quantity}
                                                         onChange={e =>
                                                             updateItem(item.id, {
@@ -883,7 +809,6 @@ export function CreateQuote() {
                                                         }
                                                         className="w-[50px] text-center"
                                                         min="1"
-                                                        disabled={!item.product_id}
                                                     />
                                                 </TableCell>
                                                 <TableCell className="py-4">
@@ -900,7 +825,6 @@ export function CreateQuote() {
                                                         className="w-[70px]"
                                                         min="0"
                                                         step="0.01"
-                                                        disabled={!item.product_id}
                                                     />
                                                 </TableCell>
                                                 <TableCell className="py-4 text-right font-medium">
@@ -912,7 +836,6 @@ export function CreateQuote() {
                                                         onChange={value =>
                                                             updateItem(item.id, { taxPercentage: value })
                                                         }
-                                                        disabled={!item.product_id}
                                                     />
                                                 </TableCell>
                                                 <TableCell className="py-4 text-right font-medium">
@@ -945,15 +868,27 @@ export function CreateQuote() {
                             </div>
 
                             <div className="mt-6 flex items-center justify-between">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={addRow}
-                                    className="flex items-center gap-2"
-                                >
-                                    <PlusCircle size={16} />
-                                    Add Product
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={addRow}
+                                        className="flex items-center gap-2"
+                                    >
+                                        <PlusCircle size={16} />
+                                        Add Product
+                                    </Button>
+                                    <CustomProductInput
+                                        onAddProduct={(product) => {
+                                            const newId = Math.max(...items.map(item => item.id), 0) + 1;
+                                            const newItem = {
+                                                ...createEmptyItem(newId),
+                                                ...product,
+                                            } as QuoteItem;
+                                            setItems(prev => [...prev, newItem]);
+                                        }}
+                                    />
+                                </div>
                             </div>
 
                             <Separator className="my-6" />
@@ -1025,9 +960,10 @@ export function CreateQuote() {
                                     onClick={handleSubmit}
                                     size="lg"
                                     disabled={
-                                        items.every(item => !item.product_id) ||
+                                        isSubmitting ||
+                                        items.every(item => !item.productName) ||
                                         !billTo.name ||
-                                        !billTo.email
+                                        !billTo.contact_no
                                     }
                                     className="min-w-[140px]"
                                 >

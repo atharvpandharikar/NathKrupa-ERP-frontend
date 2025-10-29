@@ -37,6 +37,7 @@ export interface QuoteItem {
     product_id?: string;
     variant_id?: string;
     selectedVariant?: ProductVariant;
+    hsnCode?: string; // HSN code for the product
 }
 
 export interface BillTo {

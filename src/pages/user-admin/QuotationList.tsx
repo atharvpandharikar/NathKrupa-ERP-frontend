@@ -30,16 +30,16 @@ import {
     Download,
     FileText,
     CalendarDays,
-    ExternalLink,
     ChevronsLeft,
     ChevronsRight,
     Building2,
-    User,
-    Phone,
-    Mail,
     IndianRupee,
     Eye,
     Receipt,
+    User,
+    Phone,
+    Mail,
+    ExternalLink,
 } from 'lucide-react';
 import {
     ApiResponse,
@@ -73,7 +73,16 @@ const getStats = (
 
 // Memoized table row component for better performance
 const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; index: number; offset: number }) => {
-    const parsed = quote.parsed_data || {};
+    const displayIndex = offset + index + 1;
+    const downloadHref = quote.quotation_pdf;
+    const quotationLabel = quote.summary?.org_name || `#${quote.quotation_no ?? '—'}`;
+    const createdOn = formatDate(quote.created_at);
+    const customerName = quote.summary?.name || '—';
+    const contactNo = quote.summary?.contact_no || '—';
+    const emailAddress = quote.summary?.email || '—';
+    const totalDisplay = quote.summary?.total_after_discount != null
+        ? `₹ ${quote.summary.total_after_discount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+        : '—';
 
     return (
         <TableRow
@@ -85,7 +94,7 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                     variant="outline"
                     className="h-6 w-8 justify-center font-mono text-xs"
                 >
-                    {offset + index + 1}
+                    {displayIndex}
                 </Badge>
             </TableCell>
 
@@ -95,7 +104,7 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                         <CalendarDays className="text-muted-foreground h-3 w-3" />
                     </div>
                     <span className="text-sm font-medium">
-                        {formatDate(quote.created_at)}
+                        {createdOn}
                     </span>
                 </div>
             </TableCell>
@@ -105,12 +114,8 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                     <div className="bg-primary/10 rounded p-1">
                         <Building2 className="text-primary h-3 w-3" />
                     </div>
-                    <span className="max-w-[200px] truncate text-sm font-medium">
-                        {parsed.org_name || (
-                            <span className="text-muted-foreground italic">
-                                No organization
-                            </span>
-                        )}
+                    <span className="max-w-[220px] truncate text-sm font-medium text-muted-foreground">
+                        {quotationLabel}
                     </span>
                 </div>
             </TableCell>
@@ -120,12 +125,8 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                     <div className="rounded bg-blue-100 p-1 dark:bg-blue-900/30">
                         <User className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <span className="text-sm font-medium">
-                        {parsed.name || (
-                            <span className="text-muted-foreground italic">
-                                No name
-                            </span>
-                        )}
+                    <span className="text-sm font-medium text-muted-foreground">
+                        {customerName}
                     </span>
                 </div>
             </TableCell>
@@ -135,12 +136,8 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                     <div className="rounded bg-green-100 p-1 dark:bg-green-900/30">
                         <Phone className="h-3 w-3 text-green-600 dark:text-green-400" />
                     </div>
-                    <span className="font-mono text-sm">
-                        {parsed.contact_no || (
-                            <span className="text-muted-foreground italic">
-                                No contact
-                            </span>
-                        )}
+                    <span className="font-mono text-sm text-muted-foreground">
+                        {contactNo}
                     </span>
                 </div>
             </TableCell>
@@ -150,12 +147,8 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                     <div className="rounded bg-purple-100 p-1 dark:bg-purple-900/30">
                         <Mail className="h-3 w-3 text-purple-600 dark:text-purple-400" />
                     </div>
-                    <span className="max-w-[180px] truncate text-sm">
-                        {parsed.email || (
-                            <span className="text-muted-foreground italic">
-                                No email
-                            </span>
-                        )}
+                    <span className="max-w-[180px] truncate text-sm text-muted-foreground">
+                        {emailAddress}
                     </span>
                 </div>
             </TableCell>
@@ -164,12 +157,7 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                 <div className="flex items-center justify-end gap-1">
                     <IndianRupee className="h-3 w-3 text-green-600" />
                     <span className="font-semibold text-green-600 dark:text-green-400">
-                        {parsed.total_after_discount?.toLocaleString(
-                            'en-IN',
-                            {
-                                maximumFractionDigits: 2,
-                            },
-                        )}
+                        {totalDisplay}
                     </span>
                 </div>
             </TableCell>
@@ -181,7 +169,7 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
                 >
                     <Download className="h-3 w-3" />
                     <a
-                        href={quote.quotation_pdf}
+                        href={downloadHref}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs font-medium hover:underline"
@@ -236,7 +224,7 @@ export default function QuotationList() {
                     `/shop/generate-quotation-shop/?limit=${PAGE_SIZE}&offset=${offset}`
                 );
 
-                if (response.error) {
+                if (response.error === true) {
                     throw new Error('Failed to fetch quotations');
                 }
 

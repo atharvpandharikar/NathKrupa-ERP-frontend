@@ -10,7 +10,6 @@ import { getTokens } from "@/lib/api";
 import { AuthProvider } from "@/context/AuthContext";
 import { SessionTimeoutNotification } from "@/components/SessionTimeoutNotification";
 import { TitleManager } from "@/components/TitleManager";
-import { OrganizationRouter } from "./components/OrganizationRouter";
 
 // Lazy route chunks for faster initial load
 const LazyMainLayout = React.lazy(() => import("./components/layout/MainLayout"));
@@ -126,139 +125,139 @@ const App = () => {
             <Toaster />
             <Sonner />
             <SessionTimeoutNotification />
-            <React.Suspense fallback={<div className="p-6 min-h-screen flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-lg font-semibold">Loading...</div>
-                <div className="text-sm text-muted-foreground mt-2">Please wait while we load the application</div>
+            <React.Suspense fallback={
+              <div className="p-6 min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-lg font-semibold">Loading...</div>
+                  <div className="text-sm text-muted-foreground mt-2">Please wait while we load the application</div>
+                </div>
               </div>
-            </div>}>
-              <OrganizationRouter>
-                <Routes>
-                  <Route path="/" element={<HomeRedirect />} />
+            }>
+              <Routes>
+                <Route path="/" element={<HomeRedirect />} />
 
-                  {/* Auth */}
-                  <Route path="/login" element={<LazyLogin />} />
-                  <Route path="/register" element={<LazyRegister />} />
-                  <Route path="/app-selection" element={<LazyAppSelection />} />
-                  <Route path="/search-parts" element={<LazySearchParts />} />
+                {/* Auth */}
+                <Route path="/login" element={<LazyLogin />} />
+                <Route path="/register" element={<LazyRegister />} />
+                <Route path="/app-selection" element={<LazyAppSelection />} />
+                <Route path="/search-parts" element={<LazySearchParts />} />
 
-                  {/* User Admin (Shop Management) routes */}
-                  <Route path="/user-admin" element={<ProtectedRoute><ShopAdminWrapper /></ProtectedRoute>}>
-                    <Route index element={<LazyUserAdminDashboard />} />
-                    <Route path="products" element={<LazyProductList />} />
-                    <Route path="products/add" element={<LazyAddProduct />} />
-                    <Route path="products/edit/:id" element={<LazyProductList />} />
-                    <Route path="products/view/:id" element={<LazyProductList />} />
-                    <Route path="categories" element={<LazyCategoryList />} />
-                    <Route path="categories/add" element={<LazyCategoryList />} />
-                    <Route path="categories/edit/:id" element={<LazyCategoryList />} />
-                    <Route path="categories/view/:id" element={<LazyCategoryList />} />
-                    <Route path="orders" element={<LazyOrderList />} />
-                    <Route path="orders/view/:id" element={<LazyOrderList />} />
-                    <Route path="brands" element={<LazyBrandList />} />
-                    <Route path="brands/add" element={<LazyBrandList />} />
-                    <Route path="brands/edit/:id" element={<LazyBrandList />} />
-                    <Route path="vehicles" element={<LazyCarMakerList />} />
-                    <Route path="car-makers" element={<LazyCarMakerList />} />
-                    <Route path="car-makers/add" element={<LazyCarMakerList />} />
-                    <Route path="car-makers/edit/:id" element={<LazyCarMakerList />} />
-                    <Route path="car-models" element={<LazyCarModelList />} />
-                    <Route path="car-models/add" element={<LazyCarModelList />} />
-                    <Route path="car-models/edit/:id" element={<LazyCarModelList />} />
-                    <Route path="car-variants" element={<LazyCarVariantList />} />
-                    <Route path="car-variants/add" element={<LazyCarVariantList />} />
-                    <Route path="car-variants/edit/:id" element={<LazyCarVariantList />} />
-                    <Route path="tags" element={<LazyTagList />} />
-                    <Route path="tags/add" element={<LazyTagList />} />
-                    <Route path="tags/edit/:id" element={<LazyTagList />} />
-                    <Route path="sellers" element={<LazySellerList />} />
-                    <Route path="sellers/add" element={<LazySellerList />} />
-                    <Route path="sellers/edit/:id" element={<LazySellerList />} />
-                    <Route path="customers" element={<LazyCustomerList />} />
-                    <Route path="addresses" element={<LazyAddressList />} />
-                    <Route path="reviews" element={<LazyReviewList />} />
-                    <Route path="wishlists" element={<LazyWishlistList />} />
-                    <Route path="quotations" element={<LazyQuotationList />} />
-                    <Route path="create-quote" element={<LazyCreateQuote />} />
-                    <Route path="quotations/create" element={<LazyCreateQuote />} />
-                    <Route path="quotations/edit/:id" element={<LazyQuotationList />} />
-                    <Route path="seo" element={<LazySeoEntryList />} />
-                    <Route path="garage-vehicles" element={<LazyGarageVehicleList />} />
-                    <Route path="vehicle-compatibility" element={<LazyVehicleCompatibilityList />} />
-                  </Route>
+                {/* User Admin (Shop Management) routes */}
+                <Route path="/user-admin" element={<ProtectedRoute><ShopAdminWrapper /></ProtectedRoute>}>
+                  <Route index element={<LazyUserAdminDashboard />} />
+                  <Route path="products" element={<LazyProductList />} />
+                  <Route path="products/add" element={<LazyAddProduct />} />
+                  <Route path="products/edit/:id" element={<LazyProductList />} />
+                  <Route path="products/view/:id" element={<LazyProductList />} />
+                  <Route path="categories" element={<LazyCategoryList />} />
+                  <Route path="categories/add" element={<LazyCategoryList />} />
+                  <Route path="categories/edit/:id" element={<LazyCategoryList />} />
+                  <Route path="categories/view/:id" element={<LazyCategoryList />} />
+                  <Route path="orders" element={<LazyOrderList />} />
+                  <Route path="orders/view/:id" element={<LazyOrderList />} />
+                  <Route path="brands" element={<LazyBrandList />} />
+                  <Route path="brands/add" element={<LazyBrandList />} />
+                  <Route path="brands/edit/:id" element={<LazyBrandList />} />
+                  <Route path="vehicles" element={<LazyCarMakerList />} />
+                  <Route path="car-makers" element={<LazyCarMakerList />} />
+                  <Route path="car-makers/add" element={<LazyCarMakerList />} />
+                  <Route path="car-makers/edit/:id" element={<LazyCarMakerList />} />
+                  <Route path="car-models" element={<LazyCarModelList />} />
+                  <Route path="car-models/add" element={<LazyCarModelList />} />
+                  <Route path="car-models/edit/:id" element={<LazyCarModelList />} />
+                  <Route path="car-variants" element={<LazyCarVariantList />} />
+                  <Route path="car-variants/add" element={<LazyCarVariantList />} />
+                  <Route path="car-variants/edit/:id" element={<LazyCarVariantList />} />
+                  <Route path="tags" element={<LazyTagList />} />
+                  <Route path="tags/add" element={<LazyTagList />} />
+                  <Route path="tags/edit/:id" element={<LazyTagList />} />
+                  <Route path="sellers" element={<LazySellerList />} />
+                  <Route path="sellers/add" element={<LazySellerList />} />
+                  <Route path="sellers/edit/:id" element={<LazySellerList />} />
+                  <Route path="customers" element={<LazyCustomerList />} />
+                  <Route path="addresses" element={<LazyAddressList />} />
+                  <Route path="reviews" element={<LazyReviewList />} />
+                  <Route path="wishlists" element={<LazyWishlistList />} />
+                  <Route path="quotations" element={<LazyQuotationList />} />
+                  <Route path="create-quote" element={<LazyCreateQuote />} />
+                  <Route path="quotations/create" element={<LazyCreateQuote />} />
+                  <Route path="quotations/edit/:id" element={<LazyQuotationList />} />
+                  <Route path="seo" element={<LazySeoEntryList />} />
+                  <Route path="garage-vehicles" element={<LazyGarageVehicleList />} />
+                  <Route path="vehicle-compatibility" element={<LazyVehicleCompatibilityList />} />
+                </Route>
 
-                  {/* Dashboard & feature routes use the main layout and require auth */}
-                  <Route element={<ProtectedRoute><LazyMainLayout /></ProtectedRoute>}>
-                    <Route path="/dashboard" element={<LazyDashboard />} />
-                    <Route path="/dashboard/customers" element={<LazyCustomers />} />
-                    <Route path="/dashboard/customers/:id" element={<LazyCustomerDetail />} />
-                    <Route path="/features/types" element={<LazyFeatureTypes />} />
-                    <Route path="/features/prices" element={<LazyFeaturePrices />} />
-                    <Route path="/features/categories" element={<LazyFeatureCategories />} />
-                    <Route path="/features/images" element={<LazyFeatureImages />} />
-                    <Route path="/vehicles/types" element={<LazyVehicleTypes />} />
-                    <Route path="/vehicles/makers" element={<LazyVehicleMakers />} />
-                    <Route path="/vehicles/models" element={<LazyVehicleModels />} />
-                    <Route path="/quotations" element={<LazyQuotationsList />} />
-                    <Route path="/quotations/generate" element={<LazyQuotationGenerate />} />
-                    <Route path="/quotations/:id" element={<LazyQuotationDetails />} />
-                    <Route path="/work-orders" element={<LazyWorkOrdersList />} />
-                    <Route path="/work-orders/:id" element={<LazyWorkOrderDetails />} />
-                    <Route path="/work-orders/convert-to-bills" element={<LazyConvertToBills />} />
-                    <Route path="/bills" element={<LazyBillsList />} />
-                    <Route path="/bills/create" element={<LazyCreateBill />} />
-                    <Route path="/bills/test-mode" element={<LazyTestModeManagement />} />
-                    <Route path="/bills/:id" element={<LazyBillDetails />} />
-                    <Route path="/reports" element={<LazyReports />} />
-                    <Route path="/settings" element={<LazyPreferences />} />
-                  </Route>
+                {/* Dashboard & feature routes use the main layout and require auth */}
+                <Route element={<ProtectedRoute><LazyMainLayout /></ProtectedRoute>}>
+                  <Route path="/dashboard" element={<LazyDashboard />} />
+                  <Route path="/dashboard/customers" element={<LazyCustomers />} />
+                  <Route path="/dashboard/customers/:id" element={<LazyCustomerDetail />} />
+                  <Route path="/features/types" element={<LazyFeatureTypes />} />
+                  <Route path="/features/prices" element={<LazyFeaturePrices />} />
+                  <Route path="/features/categories" element={<LazyFeatureCategories />} />
+                  <Route path="/features/images" element={<LazyFeatureImages />} />
+                  <Route path="/vehicles/types" element={<LazyVehicleTypes />} />
+                  <Route path="/vehicles/makers" element={<LazyVehicleMakers />} />
+                  <Route path="/vehicles/models" element={<LazyVehicleModels />} />
+                  <Route path="/quotations" element={<LazyQuotationsList />} />
+                  <Route path="/quotations/generate" element={<LazyQuotationGenerate />} />
+                  <Route path="/quotations/:id" element={<LazyQuotationDetails />} />
+                  <Route path="/work-orders" element={<LazyWorkOrdersList />} />
+                  <Route path="/work-orders/:id" element={<LazyWorkOrderDetails />} />
+                  <Route path="/work-orders/convert-to-bills" element={<LazyConvertToBills />} />
+                  <Route path="/bills" element={<LazyBillsList />} />
+                  <Route path="/bills/create" element={<LazyCreateBill />} />
+                  <Route path="/bills/test-mode" element={<LazyTestModeManagement />} />
+                  <Route path="/bills/:id" element={<LazyBillDetails />} />
+                  <Route path="/reports" element={<LazyReports />} />
+                  <Route path="/settings" element={<LazyPreferences />} />
+                </Route>
 
-                  {/* Finance routes use the finance layout and require auth */}
-                  <Route element={<ProtectedRoute><LazyFinanceLayout /></ProtectedRoute>}>
-                    <Route path="/finance/dashboard" element={<LazyFinanceDashboard />} />
-                    <Route path="/finance/accounts" element={<LazyFinanceAccounts />} />
-                    <Route path="/finance/accounts/:id" element={<LazyAccountDetail />} />
-                    <Route path="/finance/transactions" element={<LazyFinanceTransactions />} />
-                    <Route path="/finance/transactions/new" element={<LazyFinanceTransactions />} />
-                    <Route path="/finance/transactions/:id" element={<LazyTransactionDetail />} />
-                    <Route path="/finance/reports" element={<LazyFinanceReports />} />
-                  </Route>
+                {/* Finance routes use the finance layout and require auth */}
+                <Route element={<ProtectedRoute><LazyFinanceLayout /></ProtectedRoute>}>
+                  <Route path="/finance/dashboard" element={<LazyFinanceDashboard />} />
+                  <Route path="/finance/accounts" element={<LazyFinanceAccounts />} />
+                  <Route path="/finance/accounts/:id" element={<LazyAccountDetail />} />
+                  <Route path="/finance/transactions" element={<LazyFinanceTransactions />} />
+                  <Route path="/finance/transactions/new" element={<LazyFinanceTransactions />} />
+                  <Route path="/finance/transactions/:id" element={<LazyTransactionDetail />} />
+                  <Route path="/finance/reports" element={<LazyFinanceReports />} />
+                </Route>
 
-                  {/* Purchase routes use the purchase layout and require auth */}
-                  <Route element={<ProtectedRoute><LazyPurchaseLayout /></ProtectedRoute>}>
-                    <Route path="/purchase" element={<Navigate to="/purchase/dashboard" replace />} />
-                    <Route path="/purchase/dashboard" element={<LazyPurchaseDashboard />} />
-                    <Route path="/purchase/vendors" element={<LazyPurchaseVendors />} />
-                    <Route path="/purchase/vendors/:id" element={<LazyPurchaseVendorDetail />} />
-                    <Route path="/purchase/vendors/:id/payments" element={<LazyVendorPayments />} />
-                    <Route path="/purchase/bills" element={<LazyPurchaseBills />} />
-                    <Route path="/purchase/bills/new" element={<LazyPurchaseNewBill />} />
-                    <Route path="/purchase/bills/:id" element={<LazyPurchaseBillDetail />} />
-                    <Route path="/purchase/payments" element={<LazyPurchasePayments />} />
-                    <Route path="/purchase/vendor-payments" element={<LazyVendorPayments />} />
-                    <Route path="/purchase/reports" element={<LazyPurchaseReports />} />
-                    <Route path="/purchase/settings" element={<LazyPurchaseSettings />} />
-                  </Route>
+                {/* Purchase routes use the purchase layout and require auth */}
+                <Route element={<ProtectedRoute><LazyPurchaseLayout /></ProtectedRoute>}>
+                  <Route path="/purchase" element={<Navigate to="/purchase/dashboard" replace />} />
+                  <Route path="/purchase/dashboard" element={<LazyPurchaseDashboard />} />
+                  <Route path="/purchase/vendors" element={<LazyPurchaseVendors />} />
+                  <Route path="/purchase/vendors/:id" element={<LazyPurchaseVendorDetail />} />
+                  <Route path="/purchase/vendors/:id/payments" element={<LazyVendorPayments />} />
+                  <Route path="/purchase/bills" element={<LazyPurchaseBills />} />
+                  <Route path="/purchase/bills/new" element={<LazyPurchaseNewBill />} />
+                  <Route path="/purchase/bills/:id" element={<LazyPurchaseBillDetail />} />
+                  <Route path="/purchase/payments" element={<LazyPurchasePayments />} />
+                  <Route path="/purchase/vendor-payments" element={<LazyVendorPayments />} />
+                  <Route path="/purchase/reports" element={<LazyPurchaseReports />} />
+                  <Route path="/purchase/settings" element={<LazyPurchaseSettings />} />
+                </Route>
 
-                  {/* Inventory routes use the inventory layout and require auth */}
-                  <Route element={<ProtectedRoute><LazyInventoryLayout /></ProtectedRoute>}>
-                    <Route path="/inventory" element={<LazyInventoryDashboard />} />
-                    <Route path="/inventory/warehouses" element={<LazyInventoryWarehouses />} />
-                    <Route path="/inventory/warehouses/new" element={<LazyInventoryWarehouses />} />
-                    <Route path="/inventory/entries" element={<LazyInventoryEntries />} />
-                    <Route path="/inventory/entries/new" element={<LazyInventoryEntries />} />
-                    <Route path="/inventory/entries/:id" element={<LazyInventoryEntries />} />
-                    <Route path="/inventory/units" element={<LazyInventoryUnits />} />
-                    <Route path="/inventory/racks" element={<LazyInventoryRacks />} />
-                    <Route path="/inventory/racks/new" element={<LazyInventoryRacks />} />
-                    <Route path="/inventory/reports" element={<LazyInventoryReports />} />
-                    <Route path="/inventory/low-stock" element={<LazyInventoryLowStock />} />
-                  </Route>
+                {/* Inventory routes use the inventory layout and require auth */}
+                <Route element={<ProtectedRoute><LazyInventoryLayout /></ProtectedRoute>}>
+                  <Route path="/inventory" element={<LazyInventoryDashboard />} />
+                  <Route path="/inventory/warehouses" element={<LazyInventoryWarehouses />} />
+                  <Route path="/inventory/warehouses/new" element={<LazyInventoryWarehouses />} />
+                  <Route path="/inventory/entries" element={<LazyInventoryEntries />} />
+                  <Route path="/inventory/entries/new" element={<LazyInventoryEntries />} />
+                  <Route path="/inventory/entries/:id" element={<LazyInventoryEntries />} />
+                  <Route path="/inventory/units" element={<LazyInventoryUnits />} />
+                  <Route path="/inventory/racks" element={<LazyInventoryRacks />} />
+                  <Route path="/inventory/racks/new" element={<LazyInventoryRacks />} />
+                  <Route path="/inventory/reports" element={<LazyInventoryReports />} />
+                  <Route path="/inventory/low-stock" element={<LazyInventoryLowStock />} />
+                </Route>
 
-                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </OrganizationRouter>
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
             </React.Suspense>
           </AuthProvider>
         </BrowserRouter>
