@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,14 +44,18 @@ interface BillItem {
     total: number;
 }
 
+// LocalStorage key for drafts and inactivity timeout
+const DRAFT_KEY = 'purchase_new_bill_draft_v1';
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
 // Helper function to convert products to SearchableSelectOption format
 const convertProductsToOptions = (products: ShopProduct[]): SearchableSelectOption[] => {
     return products.map((product) => {
         const purchasePrice = (product as any).purchase_price;
         return {
             value: product.product_id,
-            label: `${product.title} - MRP: ₹${product.price}${purchasePrice ? ` | Cost: ₹${purchasePrice}` : ''} | GST: ${product.taxes || 18}%`,
-            searchableText: `${product.title} ${product.product_id} ${product.price} ${purchasePrice || ''} ${product.taxes || 18}`.toLowerCase()
+            label: `${product.title} - MRP: ₹${product.price}${purchasePrice ? ` | Cost: ₹${purchasePrice}` : ''} | GST: ${product.taxes ?? 18}%`,
+            searchableText: `${product.title} ${product.product_id} ${product.price} ${purchasePrice || ''} ${product.taxes ?? 18}`.toLowerCase()
         };
     });
 };
@@ -63,6 +67,10 @@ export default function NewBill() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [showNewProductForm, setShowNewProductForm] = useState(false);
+
+    // Draft/autosave refs
+    const draftSaveTimerRef = useRef<number | null>(null);
+    const inactivityTimerRef = useRef<number | null>(null);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -83,6 +91,71 @@ export default function NewBill() {
             total: 0
         }
     ]);
+
+    // Persist draft to localStorage (debounced)
+    const saveDraftToStorage = useCallback(() => {
+        try {
+            const payload = { formData, items, savedAt: Date.now() };
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+        } catch (err) {
+            console.warn('Failed to save draft:', err);
+        }
+    }, [formData, items]);
+
+    const scheduleSaveDraft = useCallback(() => {
+        if (draftSaveTimerRef.current) {
+            window.clearTimeout(draftSaveTimerRef.current);
+        }
+        draftSaveTimerRef.current = window.setTimeout(() => {
+            saveDraftToStorage();
+        }, 500);
+
+        // reset inactivity timer
+        if (inactivityTimerRef.current) {
+            window.clearTimeout(inactivityTimerRef.current);
+        }
+        inactivityTimerRef.current = window.setTimeout(() => {
+            // Auto-close: remove draft and navigate away
+            try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
+            toast.info('Draft expired and was closed due to inactivity');
+            navigate('/purchase/bills');
+        }, INACTIVITY_TIMEOUT_MS);
+    }, [saveDraftToStorage, navigate]);
+
+    // Load draft on mount
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(DRAFT_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.formData && parsed.items) {
+                    setFormData(prev => ({ ...prev, ...parsed.formData }));
+                    setItems(parsed.items);
+                    toast.success('Restored unsaved draft');
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to load draft:', err);
+        }
+
+        // start inactivity timer so draft will auto-close if user abandons
+        if (inactivityTimerRef.current) window.clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = window.setTimeout(() => {
+            try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
+            toast.info('Draft expired and was closed due to inactivity');
+            navigate('/purchase/bills');
+        }, INACTIVITY_TIMEOUT_MS);
+
+        return () => {
+            if (draftSaveTimerRef.current) window.clearTimeout(draftSaveTimerRef.current);
+            if (inactivityTimerRef.current) window.clearTimeout(inactivityTimerRef.current);
+        };
+    }, [navigate]);
+
+    // Whenever form data or items change, schedule saving draft and reset inactivity timer
+    useEffect(() => {
+        scheduleSaveDraft();
+    }, [formData, items, scheduleSaveDraft]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -125,7 +198,7 @@ export default function NewBill() {
                 // Use purchase_price if available, otherwise use price as fallback
                 newItems[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
                 // Auto-detect GST% from product's taxes field, default to 18% if not available
-                newItems[index].gst_percent = selectedProduct.taxes || 18;
+                newItems[index].gst_percent = selectedProduct.taxes ?? 18;
             }
         }
 
@@ -202,6 +275,7 @@ export default function NewBill() {
 
             const response = await purchaseApi.bills.create(billData);
             toast.success('Bill created successfully!');
+            try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
             navigate(`/purchase/bills/${response.id}`);
         } catch (error) {
             console.error('Failed to create bill:', error);
@@ -435,6 +509,7 @@ export default function NewBill() {
                                                         <SelectValue placeholder="Select GST%" />
                                                     </SelectTrigger>
                                                     <SelectContent>
+                                                        <SelectItem value="0">0%</SelectItem>
                                                         <SelectItem value="5">5%</SelectItem>
                                                         <SelectItem value="12">12%</SelectItem>
                                                         <SelectItem value="18">18%</SelectItem>
@@ -519,7 +594,7 @@ export default function NewBill() {
                     <Button
                         type="button"
                         variant="outline"
-                        onClick={() => navigate('/purchase/bills')}
+                        onClick={() => { try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }; navigate('/purchase/bills'); }}
                     >
                         Cancel
                     </Button>
