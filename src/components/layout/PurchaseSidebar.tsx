@@ -1,6 +1,6 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import { Home, Users, FileText, CreditCard, BarChart3, Settings, Moon, Sun, LogOut, User as UserIcon, Laptop, ShoppingCart, Plus } from "lucide-react";
+import { Home, Users, FileText, CreditCard, BarChart3, Settings, Moon, Sun, LogOut, User as UserIcon, Laptop, ShoppingCart, Plus, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeMode, useTheme } from "@/hooks/useTheme";
 import { authApi, getTokens } from "@/lib/api";
@@ -16,6 +16,7 @@ type NavItem = {
 const purchaseNavItems: NavItem[] = [
     { title: "Dashboard", url: "/purchase/dashboard", icon: Home },
     { title: "Vendors", url: "/purchase/vendors", icon: Users },
+    { title: "Vendor Prices", url: "/purchase/vendor-prices", icon: DollarSign },
     { title: "Purchase Bills", url: "/purchase/bills", icon: FileText },
     { title: "Vendor Payments", url: "/purchase/vendor-payments", icon: CreditCard },
     { title: "Payments", url: "/purchase/payments", icon: FileText },

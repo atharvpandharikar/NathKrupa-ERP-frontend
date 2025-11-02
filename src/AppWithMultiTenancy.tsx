@@ -51,6 +51,7 @@ const LazyPurchaseLayout = React.lazy(() => import("./components/layout/Purchase
 const LazyPurchaseDashboard = React.lazy(() => import("./pages/purchase/Dashboard"));
 const LazyPurchaseVendors = React.lazy(() => import("./pages/purchase/Vendors"));
 const LazyPurchaseVendorDetail = React.lazy(() => import("./pages/purchase/VendorDetail"));
+const LazyPurchaseVendorPrices = React.lazy(() => import("./pages/purchase/VendorPrices"));
 const LazyVendorPayments = React.lazy(() => import("./pages/purchase/VendorPayments"));
 const LazyPurchaseBills = React.lazy(() => import("./pages/purchase/Bills"));
 const LazyPurchaseNewBill = React.lazy(() => import("./pages/purchase/NewBill"));
@@ -148,6 +149,7 @@ const App: React.FC = () => {
                                             <Route path="/purchase/vendors" element={<LazyPurchaseVendors />} />
                                             <Route path="/purchase/vendors/:id" element={<LazyPurchaseVendorDetail />} />
                                             <Route path="/purchase/vendors/:id/payments" element={<LazyVendorPayments />} />
+                                            <Route path="/purchase/vendor-prices" element={<LazyPurchaseVendorPrices />} />
                                             <Route path="/purchase/bills" element={<LazyPurchaseBills />} />
                                             <Route path="/purchase/bills/new" element={<LazyPurchaseNewBill />} />
                                             <Route path="/purchase/bills/:id" element={<LazyPurchaseBillDetail />} />

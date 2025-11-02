@@ -186,6 +186,36 @@ export default function NewBill() {
         return subtotal + gstAmount;
     };
 
+    // Function to fetch vendor price for a product
+    const fetchVendorPrice = async (vendorId: string, productId: string, index: number, itemsArray: BillItem[]) => {
+        try {
+            const response = await purchaseApi.vendorProductPrices.getPrice(parseInt(vendorId), productId);
+            if (response.purchase_price) {
+                itemsArray[index].purchase_price = parseFloat(response.purchase_price);
+                // Recalculate totals
+                const subtotal = itemsArray[index].quantity * itemsArray[index].purchase_price;
+                itemsArray[index].gst_amount = (subtotal * itemsArray[index].gst_percent) / 100;
+                itemsArray[index].total = subtotal + itemsArray[index].gst_amount;
+            } else {
+                // No vendor price found, use product's default
+                const selectedProduct = products.find(p => p.product_id === productId);
+                if (selectedProduct) {
+                    itemsArray[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
+                    const subtotal = itemsArray[index].quantity * itemsArray[index].purchase_price;
+                    itemsArray[index].gst_amount = (subtotal * itemsArray[index].gst_percent) / 100;
+                    itemsArray[index].total = subtotal + itemsArray[index].gst_amount;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch vendor price:', error);
+            // Fallback to product default price
+            const selectedProduct = products.find(p => p.product_id === productId);
+            if (selectedProduct) {
+                itemsArray[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
+            }
+        }
+    };
+
     const updateItem = (index: number, field: keyof BillItem, value: any) => {
         const newItems = [...items];
         newItems[index] = { ...newItems[index], [field]: value };
@@ -195,10 +225,16 @@ export default function NewBill() {
             const selectedProduct = products.find(p => p.product_id === value);
             if (selectedProduct) {
                 newItems[index].product = selectedProduct;
-                // Use purchase_price if available, otherwise use price as fallback
-                newItems[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
                 // Auto-detect GST% from product's taxes field, default to 18% if not available
                 newItems[index].gst_percent = selectedProduct.taxes ?? 18;
+
+                // Fetch vendor price if vendor is already selected
+                if (formData.vendor_id) {
+                    fetchVendorPrice(formData.vendor_id, value, index, newItems);
+                } else {
+                    // Use purchase_price if available, otherwise use price as fallback
+                    newItems[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
+                }
             }
         }
 
@@ -352,7 +388,17 @@ export default function NewBill() {
                                 <Label htmlFor="vendor">Vendor *</Label>
                                 <Select
                                     value={formData.vendor_id}
-                                    onValueChange={(value) => setFormData({ ...formData, vendor_id: value })}
+                                    onValueChange={(value) => {
+                                        setFormData({ ...formData, vendor_id: value });
+                                        // Fetch vendor prices for all selected products when vendor changes
+                                        if (value) {
+                                            items.forEach((item, idx) => {
+                                                if (item.product_id) {
+                                                    fetchVendorPrice(value, item.product_id, idx, [...items]);
+                                                }
+                                            });
+                                        }
+                                    }}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select a vendor" />

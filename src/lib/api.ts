@@ -898,6 +898,31 @@ export const purchaseApi = {
     update: (id: number, data: Partial<VendorAddress>) => purchaseApiBase.put<VendorAddress>(`/vendor-addresses/${id}/`, data),
     delete: (id: number) => purchaseApiBase.del(`/vendor-addresses/${id}/`),
   },
+
+  // Vendor Product Prices
+  vendorProductPrices: {
+    list: (params?: Record<string, any>) => {
+      const searchParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            searchParams.append(key, value.toString());
+          }
+        });
+      }
+      const query = searchParams.toString();
+      return purchaseApiBase.get<any[]>(`/vendor-product-prices/${query ? `?${query}` : ''}`);
+    },
+    get: (id: number) => purchaseApiBase.get<any>(`/vendor-product-prices/${id}/`),
+    create: (data: any) => purchaseApiBase.post<any>('/vendor-product-prices/', data),
+    update: (id: number, data: any) => purchaseApiBase.put<any>(`/vendor-product-prices/${id}/`, data),
+    delete: (id: number) => purchaseApiBase.del(`/vendor-product-prices/${id}/`),
+    getByProduct: (productId: string) => purchaseApiBase.get<any[]>(`/vendor-product-prices/by-product/?product_id=${productId}`),
+    getPrice: (vendorId: number, productId: string) => purchaseApiBase.get<any>(`/vendor-product-prices/get-price/?vendor_id=${vendorId}&product_id=${productId}`),
+    getPriceHistory: (id: number) => purchaseApiBase.get<any[]>(`/vendor-product-prices/${id}/price-history/`),
+    exportExcelAsync: (filters: { vendor_id?: string; is_active?: string }) => purchaseApiBase.post<{ task_id: string }>('/vendor-product-prices/export-excel-async/', filters),
+    getReportStatus: (taskId: string) => purchaseApiBase.get<any>(`/vendor-product-prices/report-status/${taskId}/`),
+  },
 };
 
 // Shop API functions
