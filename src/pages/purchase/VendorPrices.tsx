@@ -73,11 +73,11 @@ export default function VendorPrices() {
     const [searchTerm, setSearchTerm] = useState("");
     const [filterVendor, setFilterVendor] = useState<string>("all");
     const [filterActive, setFilterActive] = useState<string>("all");
-    
+
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [products, setProducts] = useState<ShopProduct[]>([]);
     const [selectedProductForAdd, setSelectedProductForAdd] = useState<string>("");
-    
+
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -85,7 +85,7 @@ export default function VendorPrices() {
     const [priceHistory, setPriceHistory] = useState<PriceHistoryItem[]>([]);
     const [exportTaskId, setExportTaskId] = useState<string | null>(null);
     const [isExporting, setIsExporting] = useState(false);
-    
+
     const [editForm, setEditForm] = useState({
         purchase_price: "",
         minimum_order_quantity: "1",
@@ -107,7 +107,7 @@ export default function VendorPrices() {
                 purchaseApi.vendors.list(),
                 shopProductsApi.list(),
             ]);
-            
+
             setVendorPrices(Array.isArray(pricesResponse) ? pricesResponse : []);
             setVendors(Array.isArray(vendorsResponse) ? vendorsResponse : []);
             setProducts(Array.isArray(productsResponse) ? productsResponse : []);
@@ -156,7 +156,7 @@ export default function VendorPrices() {
                 is_active: editForm.is_active,
                 notes: editForm.notes,
             });
-            
+
             toast.success('Vendor price updated successfully');
             setIsEditDialogOpen(false);
             fetchData();
@@ -183,7 +183,7 @@ export default function VendorPrices() {
                 is_active: editForm.is_active,
                 notes: editForm.notes,
             });
-            
+
             toast.success('Vendor price added successfully');
             setIsAddDialogOpen(false);
             setSelectedProductForAdd("");
@@ -203,12 +203,12 @@ export default function VendorPrices() {
     };
 
     const filteredPrices = vendorPrices.filter(price => {
-        const matchesSearch = searchTerm === "" || 
+        const matchesSearch = searchTerm === "" ||
             price.product_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
             price.vendor_name.toLowerCase().includes(searchTerm.toLowerCase());
-        
+
         const matchesVendor = filterVendor === "all" || price.vendor.toString() === filterVendor;
-        const matchesActive = filterActive === "all" || 
+        const matchesActive = filterActive === "all" ||
             (filterActive === "active" && price.is_active) ||
             (filterActive === "inactive" && !price.is_active);
 
@@ -225,9 +225,9 @@ export default function VendorPrices() {
             if (filterActive !== "all") {
                 filters.is_active = filterActive;
             }
-            
+
             const response = await purchaseApi.vendorProductPrices.exportExcelAsync(filters);
-            
+
             // Check if response has task_id (async) or file_path (synchronous)
             if (response.task_id) {
                 // Async export - start polling
@@ -254,12 +254,12 @@ export default function VendorPrices() {
     const pollExportStatus = async (taskId: string) => {
         const maxAttempts = 60; // 5 minutes max (60 * 5 seconds)
         let attempts = 0;
-        
+
         const poll = async () => {
             try {
                 attempts++;
                 const status = await purchaseApi.vendorProductPrices.getReportStatus(taskId);
-                
+
                 if (status.status === 'SUCCESS') {
                     // Download the file with authentication
                     if (status.result?.file_path) {
@@ -295,7 +295,7 @@ export default function VendorPrices() {
                 }
             }
         };
-        
+
         poll();
     };
 
@@ -380,8 +380,8 @@ export default function VendorPrices() {
                     <p className="text-sm text-gray-600">Manage vendor-specific prices</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button 
-                        onClick={handleExportExcel} 
+                    <Button
+                        onClick={handleExportExcel}
                         size="sm"
                         variant="outline"
                         disabled={isExporting}
@@ -451,15 +451,15 @@ export default function VendorPrices() {
                     ) : (
                         <div className="space-y-2">
                             {Object.entries(pricesByProduct).map(([productId, prices]) => {
-                                const sortedPrices = [...prices].sort((a, b) => 
+                                const sortedPrices = [...prices].sort((a, b) =>
                                     parseFloat(a.purchase_price) - parseFloat(b.purchase_price)
                                 );
                                 const cheapestPrice = sortedPrices[0];
                                 const mostExpensivePrice = sortedPrices[sortedPrices.length - 1];
 
                                 return (
-                                    <div 
-                                        key={productId} 
+                                    <div
+                                        key={productId}
                                         className="border rounded p-2.5 hover:border-primary/50 transition-colors bg-white"
                                     >
                                         {/* Product Header */}
@@ -472,26 +472,25 @@ export default function VendorPrices() {
                                                     </Badge>
                                                     {prices.length > 1 && (
                                                         <span className="text-[10px] text-gray-500">
-                                                            ₹{parseFloat(cheapestPrice.purchase_price).toFixed(0)} - 
+                                                            ₹{parseFloat(cheapestPrice.purchase_price).toFixed(0)} -
                                                             ₹{parseFloat(mostExpensivePrice.purchase_price).toFixed(0)}
                                                         </span>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                         {/* Vendor Cards Grid */}
                                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-1.5">
                                             {sortedPrices.map((price, index) => (
                                                 <div
                                                     key={price.id}
-                                                    className={`border rounded p-1.5 text-[10px] ${
-                                                        index === 0 && prices.length > 1
-                                                            ? 'border-green-400 bg-green-50/50'
-                                                            : index === sortedPrices.length - 1 && prices.length > 1
+                                                    className={`border rounded p-1.5 text-[10px] ${index === 0 && prices.length > 1
+                                                        ? 'border-green-400 bg-green-50/50'
+                                                        : index === sortedPrices.length - 1 && prices.length > 1
                                                             ? 'border-red-400 bg-red-50/50'
                                                             : 'border-gray-200 bg-gray-50/30'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {/* Vendor Name with Star */}
                                                     <div className="flex items-center justify-between mb-0.5">
@@ -502,7 +501,7 @@ export default function VendorPrices() {
                                                             <Star className="h-2.5 w-2.5 fill-yellow-400 text-yellow-400 flex-shrink-0" />
                                                         )}
                                                     </div>
-                                                    
+
                                                     {/* Price */}
                                                     <div className="flex items-center gap-1 mb-0.5">
                                                         <span className="text-sm font-bold text-primary">
@@ -514,7 +513,7 @@ export default function VendorPrices() {
                                                             </Badge>
                                                         )}
                                                     </div>
-                                                    
+
                                                     {/* Min Qty & Lead Time */}
                                                     <div className="flex items-center gap-1.5 text-[9px] text-gray-600 mb-1">
                                                         <span className="flex items-center gap-0.5">
@@ -527,7 +526,7 @@ export default function VendorPrices() {
                                                             {price.lead_time_days}d
                                                         </span>
                                                     </div>
-                                                    
+
                                                     {/* Action Buttons */}
                                                     <div className="flex items-center gap-0.5">
                                                         <Button
@@ -787,7 +786,7 @@ export default function VendorPrices() {
                                             </TableCell>
                                             <TableCell>{new Date(history.effective_from).toLocaleDateString()}</TableCell>
                                             <TableCell>
-                                                {history.effective_to 
+                                                {history.effective_to
                                                     ? new Date(history.effective_to).toLocaleDateString()
                                                     : <Badge>Current</Badge>
                                                 }

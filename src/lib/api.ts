@@ -920,7 +920,7 @@ export const purchaseApi = {
     getByProduct: (productId: string) => purchaseApiBase.get<any[]>(`/vendor-product-prices/by-product/?product_id=${productId}`),
     getPrice: (vendorId: number, productId: string) => purchaseApiBase.get<any>(`/vendor-product-prices/get-price/?vendor_id=${vendorId}&product_id=${productId}`),
     getPriceHistory: (id: number) => purchaseApiBase.get<any[]>(`/vendor-product-prices/${id}/price-history/`),
-    exportExcelAsync: (filters: { vendor_id?: string; is_active?: string }) => purchaseApiBase.post<{ task_id: string }>('/vendor-product-prices/export-excel-async/', filters),
+    exportExcelAsync: (filters: { vendor_id?: string; is_active?: string }) => purchaseApiBase.post<{ task_id?: string; file_path?: string }>('/vendor-product-prices/export-excel-async/', filters),
     getReportStatus: (taskId: string) => purchaseApiBase.get<any>(`/vendor-product-prices/report-status/${taskId}/`),
   },
 };
