@@ -355,6 +355,28 @@ export const shopProductsApi = {
         });
 
         const url = `/shop-product-list/?${queryParams.toString()}`;
+
+        // First, try to get all products at once (the endpoint returns all items by default)
+        try {
+            const response = await shopApi.get<any>(url);
+
+            // Handle the response format: {error: False, count: X, data: []}
+            if (response && !response.error && Array.isArray(response.data)) {
+                console.log(`✅ Fetched ${response.data.length} products (total count: ${response.count || response.data.length})`);
+                return response.data as ShopProduct[];
+            }
+
+            // Fallback: if response is an array directly
+            if (Array.isArray(response)) {
+                console.log(`✅ Fetched ${response.length} products (direct array)`);
+                return response as ShopProduct[];
+            }
+        } catch (error) {
+            console.warn('⚠️ Direct fetch failed, trying pagination:', error);
+        }
+
+        // Fallback to pagination if direct fetch doesn't work
+        console.log('🔄 Falling back to pagination...');
         return fetchAll<ShopProduct>(url);
     },
 
