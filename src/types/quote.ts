@@ -52,6 +52,7 @@ export interface BillTo {
     pin_code: string;
     state: string;
     date: string;
+    customer_id?: string; // Customer ID for pricing lookup
 }
 
 export interface Other {

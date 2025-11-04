@@ -980,6 +980,141 @@ export const shopCustomersApi = {
     const response = await shopApi.get<{ error: boolean; count: number; data: ShopCustomer[] }>(url);
     return response.error ? [] : response.data;
   },
+  update: async (customerId: string, data: { customer_group?: string | null; customer_type?: string; is_active?: boolean }) => {
+    return shopApi.patch<ShopCustomer>(`/shop/customers/${customerId}/`, data);
+  },
+};
+
+// Customer Pricing API Types
+export interface CustomerGroup {
+  id: string;
+  name: string;
+  discount_percentage: string;
+  description?: string;
+  is_active: boolean;
+  customer_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerProductPriceTier {
+  id: string;
+  customer_product_price: string;
+  min_quantity: string;
+  max_quantity?: string;
+  tier_price?: string;
+  tier_discount_percentage?: string;
+  priority: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerProductPriceHistory {
+  id: string;
+  customer_product_price: string;
+  selling_price?: string;
+  discount_percentage?: string;
+  effective_from: string;
+  effective_to?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface CustomerProductPrice {
+  id: string;
+  customer: string;
+  customer_name?: string;
+  customer_email?: string;
+  product: string;
+  product_id?: string;
+  product_title?: string;
+  selling_price?: string;
+  discount_percentage?: string;
+  is_active: boolean;
+  effective_from: string;
+  notes?: string;
+  price_tiers?: CustomerProductPriceTier[];
+  price_history?: CustomerProductPriceHistory[];
+  created_at: string;
+  updated_at: string;
+}
+
+// Customer Groups API
+export const customerGroupsApi = {
+  list: async () => {
+    const response = await shopApi.get<CustomerGroup[]>('/customer-groups/');
+    return Array.isArray(response) ? response : [];
+  },
+  get: async (id: string) => {
+    return shopApi.get<CustomerGroup>(`/customer-groups/${id}/`);
+  },
+  create: async (data: Partial<CustomerGroup>) => {
+    return shopApi.post<CustomerGroup>('/customer-groups/', data);
+  },
+  update: async (id: string, data: Partial<CustomerGroup>) => {
+    return shopApi.put<CustomerGroup>(`/customer-groups/${id}/`, data);
+  },
+  delete: async (id: string) => {
+    return shopApi.del(`/customer-groups/${id}/`);
+  },
+};
+
+// Customer Product Prices API
+export const customerProductPricesApi = {
+  list: async (params?: { customer?: string; product?: string; is_active?: boolean }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.customer) queryParams.append('customer', params.customer);
+    if (params?.product) queryParams.append('product', params.product);
+    if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString());
+    
+    const url = queryParams.toString() 
+      ? `/customer-product-prices/?${queryParams.toString()}`
+      : '/customer-product-prices/';
+    const response = await shopApi.get<CustomerProductPrice[]>(url);
+    return Array.isArray(response) ? response : [];
+  },
+  get: async (id: string) => {
+    return shopApi.get<CustomerProductPrice>(`/customer-product-prices/${id}/`);
+  },
+  create: async (data: Partial<CustomerProductPrice>) => {
+    return shopApi.post<CustomerProductPrice>('/customer-product-prices/', data);
+  },
+  update: async (id: string, data: Partial<CustomerProductPrice>) => {
+    return shopApi.put<CustomerProductPrice>(`/customer-product-prices/${id}/`, data);
+  },
+  delete: async (id: string) => {
+    return shopApi.del(`/customer-product-prices/${id}/`);
+  },
+  getByCustomer: async (customerId: string) => {
+    const response = await shopApi.get<{ error: boolean; count: number; data: CustomerProductPrice[] }>(
+      `/customer-product-prices/by_customer/?customer_id=${customerId}`
+    );
+    return response.error ? [] : response.data;
+  },
+  getByProduct: async (productId: string) => {
+    const response = await shopApi.get<{ error: boolean; count: number; data: CustomerProductPrice[] }>(
+      `/customer-product-prices/by_product/?product_id=${productId}`
+    );
+    return response.error ? [] : response.data;
+  },
+  getPriceHistory: async (customerId: string, productId: string) => {
+    const response = await shopApi.get<{ error: boolean; count: number; data: CustomerProductPriceHistory[] }>(
+      `/shop/customer-price-history/?customer_id=${customerId}&product_id=${productId}`
+    );
+    return response.error ? [] : response.data;
+  },
+  getCustomerPrice: async (customerId: string, productId: string, quantity: number = 1) => {
+    return shopApi.get<{ error: boolean; data: { base_price: number; final_price: number; discount_applied: number; pricing_source: string } }>(
+      `/shop/get-customer-price/?customer_id=${customerId}&product_id=${productId}&quantity=${quantity}`
+    );
+  },
+  bulkUpdate: async (customerId: string, prices: Array<{ product_id: string; selling_price?: number; discount_percentage?: number }>) => {
+    return shopApi.post<{ error: boolean; message: string; created: number; updated: number }>(
+      '/shop/bulk-customer-price-update/',
+      { customer_id: customerId, prices }
+    );
+  },
 };
 
 // Category Products API

@@ -89,6 +89,8 @@ const LazySeoEntryList = React.lazy(() => import("./pages/user-admin/SeoEntryLis
 const LazyGarageVehicleList = React.lazy(() => import("./pages/user-admin/GarageVehicleList"));
 const LazyVehicleCompatibilityList = React.lazy(() => import("./pages/user-admin/VehicleCompatibilityList"));
 const LazyCustomerList = React.lazy(() => import("./pages/user-admin/CustomerList"));
+const LazyCustomerGroups = React.lazy(() => import("./pages/user-admin/CustomerGroups"));
+const LazyCustomerPrices = React.lazy(() => import("./pages/user-admin/CustomerPrices"));
 const LazyCreateQuote = React.lazy(() => import("./pages/user-admin/CreateQuote"));
 const LazyShopAdminLayout = React.lazy(() => import("./components/layout/ShopAdminLayout"));
 
@@ -176,6 +178,8 @@ const App = () => {
                   <Route path="sellers/add" element={<LazySellerList />} />
                   <Route path="sellers/edit/:id" element={<LazySellerList />} />
                   <Route path="customers" element={<LazyCustomerList />} />
+                  <Route path="customer-groups" element={<LazyCustomerGroups />} />
+                  <Route path="customer-prices" element={<LazyCustomerPrices />} />
                   <Route path="addresses" element={<LazyAddressList />} />
                   <Route path="reviews" element={<LazyReviewList />} />
                   <Route path="wishlists" element={<LazyWishlistList />} />

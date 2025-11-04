@@ -132,9 +132,7 @@ export default function CarModelList() {
     const fetchCarModels = async (makerId?: string) => {
         try {
             setLoading(true);
-            console.log('🔄 Fetching car models...', { makerId });
             const data = await optimizedShopApi.carModels.list(makerId);
-            console.log('📦 Car models response:', data);
 
             if (Array.isArray(data)) {
                 setCarModels(data);

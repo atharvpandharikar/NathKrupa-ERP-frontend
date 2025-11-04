@@ -65,6 +65,8 @@ const navigationGroups: NavGroup[] = [
         title: "Customer Management",
         items: [
             { title: "Customers", icon: Users, url: "/user-admin/customers" },
+            { title: "Customer Groups", icon: Users, url: "/user-admin/customer-groups" },
+            { title: "Customer Prices", icon: ShoppingBag, url: "/user-admin/customer-prices" },
             { title: "Addresses", icon: MapPin, url: "/user-admin/addresses" },
             { title: "Reviews", icon: Star, url: "/user-admin/reviews" },
             { title: "Wishlists", icon: Heart, url: "/user-admin/wishlists" },

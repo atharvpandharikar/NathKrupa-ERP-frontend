@@ -34,9 +34,10 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 // Config
-import { shopApi } from '@/lib/api';
+import { shopApi, customerProductPricesApi } from '@/lib/api';
 // Constants
 import { INDIAN_STATES } from '@/constants/states';
 // Types
@@ -69,13 +70,18 @@ type TaxOption = (typeof TAX_OPTIONS)[number];
 const DEFAULT_TAX: TaxOption = 12;
 
 // Utility functions
-const calculateItemValues = (item: Partial<QuoteItem>): Partial<QuoteItem> => {
+const calculateItemValues = (
+    item: Partial<QuoteItem>,
+    billWithoutGST: boolean = false,
+): Partial<QuoteItem> => {
     const quantity = Number(item.quantity) || 0;
     const listPrice = Number(item.listPrice) || 0;
     const taxPercentage = Number(item.taxPercentage) || DEFAULT_TAX;
 
     const amount = quantity * listPrice;
-    const taxAmount = Math.round(amount * (taxPercentage / 100) * 100) / 100;
+    const taxAmount = billWithoutGST
+        ? 0
+        : Math.round(amount * (taxPercentage / 100) * 100) / 100;
     const total = amount + taxAmount;
 
     return {
@@ -305,6 +311,7 @@ export function CreateQuote() {
         discount: '0',
         shipping_charges: '0',
     });
+    const [billWithoutGST, setBillWithoutGST] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const [searchParams] = useSearchParams();
@@ -357,7 +364,7 @@ export function CreateQuote() {
                                     };
                                     return {
                                         ...createEmptyItem(idx + 1),
-                                        ...calculateItemValues(base),
+                                        ...calculateItemValues(base, billWithoutGST),
                                         ...base,
                                     } as QuoteItem;
                                 }),
@@ -417,7 +424,7 @@ export function CreateQuote() {
                                     };
                                     return {
                                         ...createEmptyItem(idx + 1),
-                                        ...calculateItemValues(base),
+                                        ...calculateItemValues(base, billWithoutGST),
                                         ...base,
                                     } as QuoteItem;
                                 }),
@@ -443,11 +450,36 @@ export function CreateQuote() {
         // If neither quotation_json nor load_draft=true, start with fresh form (default behavior)
     }, [searchParams]);
 
-    const updateItem = (id: number, updates: Partial<QuoteItem>) => {
+    const updateItem = async (id: number, updates: Partial<QuoteItem>) => {
         setItems(prevItems =>
             prevItems.map(item => {
                 if (item.id === id) {
                     const updatedItem = { ...item, ...updates };
+                    
+                    // If quantity changed and customer is selected, fetch updated price (for tiered pricing)
+                    if ('quantity' in updates && billTo.customer_id && updatedItem.product_id && updatedItem.quantity > 0) {
+                        // Fetch price asynchronously but don't block UI
+                        customerProductPricesApi.getCustomerPrice(
+                            billTo.customer_id,
+                            updatedItem.product_id,
+                            updatedItem.quantity
+                        ).then(priceResponse => {
+                            if (!priceResponse.error && priceResponse.data) {
+                                const discountedPrice = priceResponse.data.final_price;
+                                if (discountedPrice !== updatedItem.listPrice) {
+                                    // Update with new price if different
+                                    setItems(prev => prev.map(i => 
+                                        i.id === id 
+                                            ? { ...i, listPrice: discountedPrice, ...calculateItemValues({ ...i, listPrice: discountedPrice }, billWithoutGST) }
+                                            : i
+                                    ));
+                                }
+                            }
+                        }).catch(error => {
+                            console.error(`Error fetching price for product ${updatedItem.product_id}:`, error);
+                        });
+                    }
+                    
                     if (
                         'quantity' in updates ||
                         'listPrice' in updates ||
@@ -455,7 +487,7 @@ export function CreateQuote() {
                     ) {
                         return {
                             ...updatedItem,
-                            ...calculateItemValues(updatedItem),
+                            ...calculateItemValues(updatedItem, billWithoutGST),
                         } as QuoteItem;
                     }
                     return updatedItem;
@@ -465,32 +497,73 @@ export function CreateQuote() {
         );
     };
 
-    const handleProductSelect = (
+    const handleProductSelect = async (
         itemId: number,
         product: Product,
         variant?: ProductVariant,
     ) => {
         const selectedVariant =
             variant || (product.product_variant?.[0] ?? undefined);
-        const price = selectedVariant?.price ?? product.price;
+        const basePrice = selectedVariant?.price ?? product.price;
         const taxPercentage: TaxOption = TAX_OPTIONS.includes(
             product.taxes as TaxOption,
         )
             ? (product.taxes as TaxOption)
             : DEFAULT_TAX;
 
+        // Fetch customer-specific price if customer is selected
+        let finalPrice = basePrice;
+        if (billTo.customer_id && product.product_id) {
+            try {
+                const priceResponse = await customerProductPricesApi.getCustomerPrice(
+                    billTo.customer_id,
+                    product.product_id,
+                    1 // quantity
+                );
+                
+                if (!priceResponse.error && priceResponse.data) {
+                    finalPrice = priceResponse.data.final_price;
+                    
+                    // Show discount info if discount was applied
+                    if (priceResponse.data.discount_applied > 0) {
+                        const discountType = priceResponse.data.pricing_source === 'customer_group' 
+                            ? 'group discount' 
+                            : 'customer discount';
+                        toast.success(
+                            `${discountType} applied: ${priceResponse.data.discount_applied}% off. ` +
+                            `Price: ₹${basePrice.toFixed(2)} → ₹${finalPrice.toFixed(2)}`,
+                            { duration: 3000 }
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching customer price:', error);
+                // Continue with base price if API fails
+            }
+        }
+
         const updates: Partial<QuoteItem> = {
             productName: selectedVariant ? selectedVariant.title : product.title,
             product_id: product.product_id,
             variant_id: selectedVariant?.variant_id,
             selectedVariant,
-            listPrice: price,
+            listPrice: finalPrice, // Use discounted price
             quantity: 1,
             taxPercentage,
         };
 
         updateItem(itemId, updates);
     };
+
+    // Recalculate all items when billWithoutGST changes
+    useEffect(() => {
+        setItems(prevItems =>
+            prevItems.map(item => ({
+                ...item,
+                ...calculateItemValues(item, billWithoutGST),
+            })),
+        );
+    }, [billWithoutGST]);
 
     const addRow = () => {
         const newId = Math.max(...items.map(item => item.id), 0) + 1;
@@ -545,6 +618,7 @@ export function CreateQuote() {
                 {
                     discount: String(other.discount),
                     shipping_charges: String(other.shipping_charges || '0'),
+                    bill_without_gst: billWithoutGST ? 'true' : 'false',
                 },
             ],
         };
@@ -658,8 +732,33 @@ export function CreateQuote() {
                             {/* Customer Selector Component */}
                             <CustomerSelector
                                 billTo={billTo}
-                                onCustomerSelect={(customerData) => {
+                                onCustomerSelect={async (customerData) => {
                                     setBillTo(prev => ({ ...prev, ...customerData }));
+                                    
+                                    // If customer changed and has products, update prices
+                                    if (customerData.customer_id && items.length > 0) {
+                                        toast.info('Updating product prices with customer discount...', { duration: 2000 });
+                                        
+                                        // Update prices for all existing products
+                                        for (const item of items) {
+                                            if (item.product_id && item.quantity > 0) {
+                                                try {
+                                                    const priceResponse = await customerProductPricesApi.getCustomerPrice(
+                                                        customerData.customer_id,
+                                                        item.product_id,
+                                                        item.quantity
+                                                    );
+                                                    
+                                                    if (!priceResponse.error && priceResponse.data) {
+                                                        const discountedPrice = priceResponse.data.final_price;
+                                                        updateItem(item.id, { listPrice: discountedPrice });
+                                                    }
+                                                } catch (error) {
+                                                    console.error(`Error fetching price for product ${item.product_id}:`, error);
+                                                }
+                                            }
+                                        }
+                                    }
                                 }}
                             />
 
@@ -694,40 +793,57 @@ export function CreateQuote() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="discount" className="text-sm font-medium">
-                                        Discount (₹)
-                                    </Label>
-                                    <Input
-                                        id="discount"
-                                        type="number"
-                                        placeholder="Enter discount amount"
-                                        value={other.discount}
-                                        onChange={event_ =>
-                                            updateOther('discount', event_.target.value)
-                                        }
-                                        min="0"
+                            <div className="space-y-4">
+                                {/* Bill Without GST Option */}
+                                <div className="flex items-center space-x-2 rounded-md border p-3">
+                                    <Checkbox
+                                        id="bill_without_gst"
+                                        checked={billWithoutGST}
+                                        onCheckedChange={checked => setBillWithoutGST(checked === true)}
                                     />
-                                </div>
-                                {/* Shipping Charges */}
-                                <div className="space-y-2">
                                     <Label
-                                        htmlFor="shipping_charges"
-                                        className="text-sm font-medium"
+                                        htmlFor="bill_without_gst"
+                                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                                     >
-                                        Shipping Charges (₹)
+                                        Bill without GST
                                     </Label>
-                                    <Input
-                                        id="shipping_charges"
-                                        type="number"
-                                        placeholder="Enter shipping charges"
-                                        value={other.shipping_charges}
-                                        onChange={event_ =>
-                                            updateOther('shipping_charges', event_.target.value)
-                                        }
-                                        min="0"
-                                    />
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="discount" className="text-sm font-medium">
+                                            Discount (₹)
+                                        </Label>
+                                        <Input
+                                            id="discount"
+                                            type="number"
+                                            placeholder="Enter discount amount"
+                                            value={other.discount}
+                                            onChange={event_ =>
+                                                updateOther('discount', event_.target.value)
+                                            }
+                                            min="0"
+                                        />
+                                    </div>
+                                    {/* Shipping Charges */}
+                                    <div className="space-y-2">
+                                        <Label
+                                            htmlFor="shipping_charges"
+                                            className="text-sm font-medium"
+                                        >
+                                            Shipping Charges (₹)
+                                        </Label>
+                                        <Input
+                                            id="shipping_charges"
+                                            type="number"
+                                            placeholder="Enter shipping charges"
+                                            value={other.shipping_charges}
+                                            onChange={event_ =>
+                                                updateOther('shipping_charges', event_.target.value)
+                                            }
+                                            min="0"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </CardContent>
@@ -836,6 +952,7 @@ export function CreateQuote() {
                                                         onChange={value =>
                                                             updateItem(item.id, { taxPercentage: value })
                                                         }
+                                                        disabled={billWithoutGST}
                                                     />
                                                 </TableCell>
                                                 <TableCell className="py-4 text-right font-medium">
@@ -879,11 +996,17 @@ export function CreateQuote() {
                                         Add Product
                                     </Button>
                                     <CustomProductInput
+                                        billWithoutGST={billWithoutGST}
                                         onAddProduct={(product) => {
                                             const newId = Math.max(...items.map(item => item.id), 0) + 1;
+                                            // Recalculate values with current billWithoutGST state
+                                            const recalculatedProduct = {
+                                                ...product,
+                                                ...calculateItemValues(product, billWithoutGST),
+                                            };
                                             const newItem = {
                                                 ...createEmptyItem(newId),
-                                                ...product,
+                                                ...recalculatedProduct,
                                             } as QuoteItem;
                                             setItems(prev => [...prev, newItem]);
                                         }}
@@ -905,12 +1028,20 @@ export function CreateQuote() {
                                             {formatCurrency(totals.amount)}
                                         </span>
                                     </div>
-                                    <div className="flex justify-between">
-                                        <span>Total Tax:</span>
-                                        <span className="font-medium">
-                                            {formatCurrency(totals.taxAmount)}
-                                        </span>
-                                    </div>
+                                    {!billWithoutGST && (
+                                        <div className="flex justify-between">
+                                            <span>Total Tax:</span>
+                                            <span className="font-medium">
+                                                {formatCurrency(totals.taxAmount)}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {billWithoutGST && (
+                                        <div className="flex justify-between text-muted-foreground">
+                                            <span>Total Tax:</span>
+                                            <span className="font-medium">₹0.00 (GST excluded)</span>
+                                        </div>
+                                    )}
                                     <div className="flex justify-between">
                                         <span>Before Discount:</span>
                                         <span className="font-medium">

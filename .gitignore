@@ -58,4 +58,20 @@ update-remaining-pages.js
 prod-index.html
 
 # Temporary files
-tatus --porcelain
+*.tmp
+*.bak
+*_SUMMARY*.md
+*_REDESIGN*.md
+*_COMPACT*.md
+
+# AWS/EB temporary files
+eb_*.txt
+eb_*.json
+eb-logs*.txt
+__fetch_done*.txt
+elb.json
+ssm_*.json
+env_resources.json
+redirect-policy.json
+eb_logs_bundle/
+eb_logs_bundle.zip

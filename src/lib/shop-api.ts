@@ -144,6 +144,7 @@ export interface ShopProduct {
     title: string;
     description?: string;
     price: number;
+    purchase_price?: number;
     discounted_price?: number;
     discount_percentage?: number;
     discount_amount?: number;
@@ -258,12 +259,25 @@ export interface CarModel {
 export interface CarVariant {
     id: string;
     name: string;
+    slug?: string;
     model: CarModel;
-    fuel_type?: string;
-    engine_size?: string;
-    is_active: boolean;
+    car_maker?: CarMaker;
+    car_maker_id?: string;
+    model_id?: string;
+    year_start?: number;
+    year_end?: number;
+    engine_liters?: number;
+    engine_type?: string;
+    engine_power?: number;
+    motor_power?: number;
+    fuel_engine?: string;
+    body_type?: string;
+    vehicle_type?: string;
+    image?: string;
+    oem_url?: string;
+    is_active?: boolean;
     created_at: string;
-    updated_at: string;
+    updated_at?: string;
 }
 
 export interface ShopTag {
@@ -395,6 +409,22 @@ export const shopProductsApi = {
     search: async (query: string) => {
         const response = await shopApi.get<any>(`/search-parts/?search=${encodeURIComponent(query)}`);
         return response.error ? [] : response.data || [];
+    },
+
+    exportProducts: async (params: {
+        format: 'excel' | 'pdf';
+        vendor_id?: string;
+        category_id?: string;
+        start_date?: string;
+        end_date?: string;
+    }) => {
+        const response = await shopApi.post<any>('/export-products/', params);
+        return response;
+    },
+
+    getExportStatus: async (taskId: string) => {
+        const response = await shopApi.get<any>(`/export-products/${taskId}/`);
+        return response;
     },
 };
 
@@ -604,7 +634,14 @@ export const carMakersApi = {
 export const carModelsApi = {
     list: async (makerId?: string) => {
         const queryParams = makerId ? `?car_maker=${makerId}` : '';
-        const response = await shopApi.get<any>(`/shop/car-models/${queryParams}`);
+        // Django REST Framework requires trailing slash
+        const url = `/shop/car-models/${queryParams}`;
+        const response = await shopApi.get<any>(url);
+
+        // Check for error response first
+        if (response?.error === true) {
+            return [];
+        }
 
         // Handle different response formats
         if (Array.isArray(response)) {
@@ -630,18 +667,28 @@ export const carModelsApi = {
 export const carVariantsApi = {
     list: async (modelId?: string) => {
         const queryParams = modelId ? `?model=${modelId}` : '';
-        const response = await shopApi.get<CarVariant[]>(`/shop/car-variants/${queryParams}`);
-        return Array.isArray(response) ? response : [];
+        const response = await shopApi.get<any>(`/shop/car-variants/${queryParams}`);
+        console.log('📦 Car variants API response:', response);
+        // Handle different response formats
+        if (Array.isArray(response)) {
+            return response;
+        } else if (response?.data && Array.isArray(response.data)) {
+            return response.data;
+        } else if (response?.results && Array.isArray(response.results)) {
+            return response.results;
+        }
+        console.warn('⚠️ Unexpected car variants response format:', response);
+        return [];
     },
 
-    get: (id: string) => shopApi.get<CarVariant>(`/shop/car-variants/${id}/`),
+    get: (id: string) => shopApi.get<CarVariant>(`/shop/car-variants-crud/${id}/`),
 
-    create: (data: Partial<CarVariant>) => shopApi.post<CarVariant>('/shop/car-variants/', data),
+    create: (data: Partial<CarVariant>) => shopApi.post<CarVariant>('/shop/car-variants-crud/', data),
 
     update: (id: string, data: Partial<CarVariant>) =>
-        shopApi.put<CarVariant>(`/shop/car-variants/${id}/`, data),
+        shopApi.put<CarVariant>(`/shop/car-variants-crud/${id}/`, data),
 
-    delete: (id: string) => shopApi.del(`/shop/car-variants/${id}/`),
+    delete: (id: string) => shopApi.del(`/shop/car-variants-crud/${id}/`),
 };
 
 export const shopTagsApi = {

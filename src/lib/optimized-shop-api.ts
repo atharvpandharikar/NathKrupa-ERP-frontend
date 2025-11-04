@@ -189,23 +189,29 @@ export const optimizedShopApi = {
             return cacheHelpers.getOrFetch(
                 cacheKey,
                 async () => {
-                    console.log('🔄 Fetching car models from API...');
                     const queryParams = makerId ? `?car_maker=${makerId}` : '';
-                    const response = await shopApi.get<any>(`/shop/car-models/${queryParams}`);
-                    console.log('📦 Raw API response:', response);
+                    // Django REST Framework requires trailing slash
+                    const url = `/shop/car-models/${queryParams}`;
+                    const response = await shopApi.get<any>(url);
+
+                    // Check for error response first
+                    if (response?.error === true) {
+                        return [];
+                    }
 
                     // Handle different response formats
                     if (Array.isArray(response)) {
-                        console.log('📦 Response is array, returning as-is');
                         return response as CarModel[];
                     } else if (response?.data && Array.isArray(response.data)) {
-                        console.log('📦 Response has data array, returning data');
                         return response.data as CarModel[];
                     } else if (response?.results && Array.isArray(response.results)) {
-                        console.log('📦 Response has results array, returning results');
                         return response.results as CarModel[];
+                    } else if (response?.next || response?.previous) {
+                        // DRF paginated response format
+                        if (Array.isArray(response?.results)) {
+                            return response.results as CarModel[];
+                        }
                     }
-                    console.log('📦 No valid data found, returning empty array');
                     return [];
                 },
                 10 * 60 * 1000 // 10 minutes cache
@@ -246,8 +252,19 @@ export const optimizedShopApi = {
                 async () => {
                     console.log('🔄 Fetching car variants from API...');
                     const queryParams = modelId ? `?model=${modelId}` : '';
-                    const response = await shopApi.get<CarVariant[]>(`/shop/car-variants/${queryParams}`);
-                    return Array.isArray(response) ? response : [];
+                    const response = await shopApi.get<any>(`/shop/car-variants/${queryParams}`);
+                    console.log('📦 Raw car variants API response:', response);
+                    
+                    // Handle different response formats
+                    if (Array.isArray(response)) {
+                        return response as CarVariant[];
+                    } else if (response?.data && Array.isArray(response.data)) {
+                        return response.data as CarVariant[];
+                    } else if (response?.results && Array.isArray(response.results)) {
+                        return response.results as CarVariant[];
+                    }
+                    console.warn('⚠️ Unexpected car variants response format:', response);
+                    return [];
                 },
                 10 * 60 * 1000 // 10 minutes cache
             );

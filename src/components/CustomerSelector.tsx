@@ -89,6 +89,7 @@ export const CustomerSelector: React.FC<CustomerSelectorProps> = ({
             city: customer.city || '',
             state: customer.state || '',
             gst_no: customer.gst_no || '',
+            customer_id: customer.id, // Include customer ID for pricing lookup
         });
         setIsOpen(false);
         setSearchQuery('');

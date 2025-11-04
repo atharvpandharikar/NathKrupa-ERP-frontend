@@ -22,8 +22,11 @@ import {
     PaginationEllipsis,
 } from '@/components/ui/pagination';
 import { toast } from 'sonner';
-import { shopApi } from '@/lib/api';
+import { shopApi, shopCustomersApi, customerGroupsApi, type CustomerGroup } from '@/lib/api';
 import { formatDate } from '@/utils/formatters';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import {
     Activity,
     Download,
@@ -43,6 +46,8 @@ import {
     ShoppingCart,
     Star,
     MapPin,
+    Edit,
+    Tag,
 } from 'lucide-react';
 
 // Types
@@ -67,6 +72,9 @@ interface Customer {
     state?: string;
     pin_code?: string;
     gst_no?: string;
+    customer_type?: string;
+    customer_group?: string | null;
+    customer_group_name?: string | null;
 }
 
 interface CustomerStats {
@@ -213,6 +221,10 @@ export default function CustomerList() {
         totalOrders: 0,
         totalRevenue: 0,
     });
+    const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false);
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    const [customerGroups, setCustomerGroups] = useState<CustomerGroup[]>([]);
+    const [selectedGroupId, setSelectedGroupId] = useState<string>("");
 
     const offset = (currentPage - 1) * PAGE_SIZE;
     const totalPages = Math.ceil(totalItems / PAGE_SIZE);
@@ -249,7 +261,48 @@ export default function CustomerList() {
         fetchCustomerListData();
     }, [currentPage]);
 
+    useEffect(() => {
+        const fetchGroups = async () => {
+            try {
+                const groups = await customerGroupsApi.list();
+                setCustomerGroups(groups);
+            } catch (error) {
+                console.error('Failed to fetch customer groups:', error);
+            }
+        };
+        fetchGroups();
+    }, []);
+
     const handlePageChange = (page: number) => setCurrentPage(page);
+
+    const openGroupDialog = (customer: Customer) => {
+        setSelectedCustomer(customer);
+        setSelectedGroupId(customer.customer_group || "none");
+        setIsGroupDialogOpen(true);
+    };
+
+    const handleSaveGroup = async () => {
+        if (!selectedCustomer) return;
+
+        try {
+            await shopCustomersApi.update(selectedCustomer.id, {
+                customer_group: selectedGroupId === "none" ? null : selectedGroupId,
+            });
+            toast.success('Customer group updated successfully');
+            setIsGroupDialogOpen(false);
+            // Refresh customer list
+            const response = await shopApi.get<ApiResponse>(
+                `/shop/customers/?limit=${PAGE_SIZE}&offset=${offset}`
+            );
+            if (!response.error) {
+                setCustomerListData(response.data || []);
+            }
+        } catch (error: any) {
+            console.error('Failed to update customer group:', error);
+            const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update customer group';
+            toast.error(errorMessage);
+        }
+    };
 
     const renderPageNumbers = () => {
         if (totalPages <= 1) return null;
@@ -535,6 +588,30 @@ export default function CustomerList() {
                                                 </TableCell>
 
                                                 <TableCell>
+                                                    {customer.customer_group_name ? (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 cursor-pointer"
+                                                            onClick={() => openGroupDialog(customer)}
+                                                            title="Click to change group"
+                                                        >
+                                                            <Tag className="h-3 w-3 mr-1" />
+                                                            {customer.customer_group_name}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-xs text-muted-foreground hover:text-primary"
+                                                            onClick={() => openGroupDialog(customer)}
+                                                        >
+                                                            <Tag className="h-3 w-3 mr-1" />
+                                                            Assign Group
+                                                        </Button>
+                                                    )}
+                                                </TableCell>
+
+                                                <TableCell>
                                                     <Badge
                                                         variant={customer.is_active ? "default" : "secondary"}
                                                         className={`${customer.is_active
@@ -547,15 +624,26 @@ export default function CustomerList() {
                                                 </TableCell>
 
                                                 <TableCell>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="hover:bg-primary hover:text-primary-foreground gap-2 transition-all duration-200"
-                                                        title="View customer details"
-                                                    >
-                                                        <Eye className="h-3 w-3" />
-                                                        View
-                                                    </Button>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="hover:bg-primary hover:text-primary-foreground gap-2 transition-all duration-200"
+                                                            title="View customer details"
+                                                        >
+                                                            <Eye className="h-3 w-3" />
+                                                            View
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="hover:bg-blue-500 hover:text-white gap-2 transition-all duration-200"
+                                                            title="Assign customer group"
+                                                            onClick={() => openGroupDialog(customer)}
+                                                        >
+                                                            <Edit className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
                                                 </TableCell>
                                             </TableRow>
                                         ))
@@ -658,6 +746,47 @@ export default function CustomerList() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Customer Group Assignment Dialog */}
+            <Dialog open={isGroupDialogOpen} onOpenChange={setIsGroupDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Assign Customer Group</DialogTitle>
+                        <DialogDescription>
+                            {selectedCustomer && `Assign a discount group to ${selectedCustomer.full_name}`}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Customer Group</Label>
+                            <Select value={selectedGroupId || "none"} onValueChange={(value) => setSelectedGroupId(value === "none" ? "" : value)}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a group (or leave empty)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">No Group</SelectItem>
+                                    {customerGroups.map((group) => (
+                                        <SelectItem key={group.id} value={group.id}>
+                                            {group.name} ({group.discount_percentage}% discount)
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                                Customers in a group will automatically receive the group's discount percentage on all products (unless they have individual pricing).
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsGroupDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSaveGroup}>
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

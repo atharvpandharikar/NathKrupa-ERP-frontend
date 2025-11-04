@@ -13,7 +13,7 @@ export default function ShopAdminLayout() {
         <SidebarProvider open={open} onOpenChange={setOpen}>
             <div className="flex w-full min-h-screen">
                 <Sidebar collapsible="icon" variant="inset">
-                    <SidebarContent className="overflow-visible">
+                    <SidebarContent>
                         <SidebarGroup>
                             <SidebarGroupLabel>
                                 <button

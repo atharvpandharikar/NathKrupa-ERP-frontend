@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,12 +24,14 @@ import { QuoteItem } from '@/types/quote';
 
 interface CustomProductInputProps {
     onAddProduct: (product: Partial<QuoteItem>) => void;
+    billWithoutGST?: boolean;
 }
 
-const TAX_OPTIONS = [12, 18, 28] as const;
+const TAX_OPTIONS = [0, 12, 18, 28] as const;
 
 export const CustomProductInput: React.FC<CustomProductInputProps> = ({
     onAddProduct,
+    billWithoutGST = false,
 }) => {
     const [open, setOpen] = useState(false);
     const [productName, setProductName] = useState('');
@@ -37,6 +39,13 @@ export const CustomProductInput: React.FC<CustomProductInputProps> = ({
     const [quantity, setQuantity] = useState('1');
     const [price, setPrice] = useState('0');
     const [tax, setTax] = useState('12');
+
+    // Update tax to 0 when billWithoutGST is enabled
+    useEffect(() => {
+        if (billWithoutGST) {
+            setTax('0');
+        }
+    }, [billWithoutGST]);
 
     const handleAddProduct = () => {
         if (!productName.trim()) {
@@ -58,9 +67,11 @@ export const CustomProductInput: React.FC<CustomProductInputProps> = ({
         const listPrice = Number(price);
         const taxPercentage = Number(tax);
 
-        // Calculate values
+        // Calculate values - respect billWithoutGST flag
         const amount = qty * listPrice;
-        const taxAmount = Math.round(amount * (taxPercentage / 100) * 100) / 100;
+        const taxAmount = billWithoutGST 
+            ? 0 
+            : Math.round(amount * (taxPercentage / 100) * 100) / 100;
         const total = amount + taxAmount;
 
         onAddProduct({
@@ -92,7 +103,10 @@ export const CustomProductInput: React.FC<CustomProductInputProps> = ({
         const listPrice = Number(price) || 0;
         const taxPercentage = Number(tax) || 12;
         const amount = qty * listPrice;
-        const taxAmount = Math.round(amount * (taxPercentage / 100) * 100) / 100;
+        // Respect billWithoutGST flag in preview
+        const taxAmount = billWithoutGST 
+            ? 0 
+            : Math.round(amount * (taxPercentage / 100) * 100) / 100;
         const total = amount + taxAmount;
 
         return { amount, taxAmount, total };
@@ -188,9 +202,11 @@ export const CustomProductInput: React.FC<CustomProductInputProps> = ({
                         <Label htmlFor="tax" className="text-sm font-medium">
                             Tax % *
                         </Label>
-                        <Select value={tax} onValueChange={setTax}>
+                        <Select value={tax} onValueChange={setTax} disabled={billWithoutGST}>
                             <SelectTrigger id="tax" className="w-full">
-                                <SelectValue>{tax}%</SelectValue>
+                                <SelectValue>
+                                    {billWithoutGST ? '0% (GST excluded)' : `${tax}%`}
+                                </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                                 {TAX_OPTIONS.map(option => (
@@ -203,6 +219,11 @@ export const CustomProductInput: React.FC<CustomProductInputProps> = ({
                                 ))}
                             </SelectContent>
                         </Select>
+                        {billWithoutGST && (
+                            <p className="text-xs text-muted-foreground">
+                                Tax is disabled because "Bill without GST" is checked
+                            </p>
+                        )}
                     </div>
 
                     {/* Preview */}
@@ -216,14 +237,21 @@ export const CustomProductInput: React.FC<CustomProductInputProps> = ({
                                     })}
                                 </span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Tax ({tax}%):</span>
-                                <span className="font-medium">
-                                    ₹{preview.taxAmount.toLocaleString('en-IN', {
-                                        minimumFractionDigits: 2,
-                                    })}
-                                </span>
-                            </div>
+                            {billWithoutGST ? (
+                                <div className="flex justify-between text-sm text-muted-foreground">
+                                    <span>Tax:</span>
+                                    <span className="font-medium">₹0.00 (GST excluded)</span>
+                                </div>
+                            ) : (
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Tax ({tax}%):</span>
+                                    <span className="font-medium">
+                                        ₹{preview.taxAmount.toLocaleString('en-IN', {
+                                            minimumFractionDigits: 2,
+                                        })}
+                                    </span>
+                                </div>
+                            )}
                             <div className="border-t pt-2 flex justify-between text-sm font-semibold">
                                 <span>Total:</span>
                                 <span>

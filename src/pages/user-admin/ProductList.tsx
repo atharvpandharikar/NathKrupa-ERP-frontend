@@ -16,9 +16,22 @@ import {
     Box,
     Grid3X3,
     List,
-    LayoutGrid
+    LayoutGrid,
+    Download,
+    FileSpreadsheet,
+    FileText,
+    Loader2
 } from "lucide-react";
-import { shopProductsApi, ShopProduct, SHOP_API_ROOT } from '@/lib/shop-api';
+import { shopProductsApi, shopCategoriesApi, ShopProduct, SHOP_API_ROOT } from '@/lib/shop-api';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ProductList() {
     const navigate = useNavigate();
@@ -29,8 +42,21 @@ export default function ProductList() {
     const [showActiveOnly, setShowActiveOnly] = useState(false);
     const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
+    // Export related state
+    const [showExportDialog, setShowExportDialog] = useState(false);
+    const [exportFormat, setExportFormat] = useState<'excel' | 'pdf'>('excel');
+    const [exportVendorId, setExportVendorId] = useState<string>('all');
+    const [exportCategoryId, setExportCategoryId] = useState<string>('all');
+    const [exportStartDate, setExportStartDate] = useState<string>('');
+    const [exportEndDate, setExportEndDate] = useState<string>('');
+    const [exportTaskId, setExportTaskId] = useState<string | null>(null);
+    const [exportStatus, setExportStatus] = useState<string>('');
+    const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
+    const [categories, setCategories] = useState<any[]>([]);
+
     useEffect(() => {
         loadProducts();
+        loadCategories();
 
         // Refetch products when the window gets focus
         const handleFocus = () => {
@@ -44,6 +70,60 @@ export default function ProductList() {
             window.removeEventListener('focus', handleFocus);
         };
     }, []);
+
+    useEffect(() => {
+        // Poll for export status if task is running
+        if (exportTaskId && (exportStatus === 'PENDING' || exportStatus === 'PROGRESS')) {
+            const interval = setInterval(async () => {
+                try {
+                    const status = await shopProductsApi.getExportStatus(exportTaskId);
+                    setExportStatus(status.status);
+                    if (status.info?.current && status.info?.total) {
+                        setExportProgress({ current: status.info.current, total: status.info.total });
+                    }
+                    if (status.status === 'SUCCESS' && status.result?.file_path) {
+                        // Download the file
+                        let fileUrl = status.result.file_path;
+                        // Check if file_path is already a full URL (starts with http:// or https://)
+                        // Otherwise prepend SHOP_API_ROOT
+                        if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+                            // It's a relative path, prepend the API root
+                            fileUrl = `${SHOP_API_ROOT}${fileUrl}`;
+                        }
+                        // Create a temporary link and trigger download
+                        const link = document.createElement('a');
+                        link.href = fileUrl;
+                        link.download = ''; // Let browser determine filename
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        setShowExportDialog(false);
+                        setExportTaskId(null);
+                        setExportStatus('');
+                        setExportProgress(null);
+                    } else if (status.status === 'FAILURE') {
+                        alert('Export failed. Please try again.');
+                        setExportTaskId(null);
+                        setExportStatus('');
+                        setExportProgress(null);
+                    }
+                } catch (error) {
+                    console.error('Error checking export status:', error);
+                }
+            }, 2000); // Poll every 2 seconds
+
+            return () => clearInterval(interval);
+        }
+    }, [exportTaskId, exportStatus]);
+
+    const loadCategories = async () => {
+        try {
+            const data = await shopCategoriesApi.list();
+            setCategories(data);
+        } catch (error) {
+            console.error('Error loading categories:', error);
+        }
+    };
 
     useEffect(() => {
         let filtered = products.filter(product =>
@@ -96,6 +176,71 @@ export default function ProductList() {
 
     const handleAddProduct = () => {
         navigate('/user-admin/products/add');
+    };
+
+    const handleExportProducts = async () => {
+        try {
+            setExportStatus('PENDING');
+            setExportTaskId(null);
+            setExportProgress(null);
+
+            const response = await shopProductsApi.exportProducts({
+                format: exportFormat,
+                vendor_id: exportVendorId !== 'all' ? exportVendorId : undefined,
+                category_id: exportCategoryId !== 'all' ? exportCategoryId : undefined,
+                start_date: exportStartDate || undefined,
+                end_date: exportEndDate || undefined,
+            });
+
+            console.log('Export response:', response);
+
+            // Check for errors first
+            if (response.error) {
+                const errorMsg = response.message || response.error || 'Failed to export products';
+                alert(`Export failed: ${errorMsg}`);
+                setExportStatus('');
+                return;
+            }
+
+            // Handle async task (when Redis is available)
+            if (response.task_id) {
+                setExportTaskId(response.task_id);
+                setExportStatus('PENDING');
+            }
+            // Handle synchronous result (when Redis is not available)
+            else if (response.file_path) {
+                // Check if file_path is already a full URL (starts with http:// or https://)
+                // Otherwise prepend SHOP_API_ROOT
+                let fileUrl = response.file_path;
+                if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+                    // It's a relative path, prepend the API root
+                    fileUrl = `${SHOP_API_ROOT}${fileUrl}`;
+                }
+                console.log('Opening file URL:', fileUrl);
+                // Create a temporary link and trigger download
+                const link = document.createElement('a');
+                link.href = fileUrl;
+                link.download = ''; // Let browser determine filename
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setShowExportDialog(false);
+                setExportStatus('');
+            } else {
+                // Unexpected response format
+                console.error('Unexpected response format:', response);
+                alert('Export completed but file path not found. Please check the console.');
+                setExportStatus('');
+            }
+        } catch (error: any) {
+            console.error('Error exporting products:', error);
+            const errorMessage = error?.response?.data?.message ||
+                error?.response?.data?.error ||
+                error?.message ||
+                'Failed to export products. Please try again.';
+            alert(errorMessage);
+            setExportStatus('');
+        }
     };
 
     const resolveProductImageUrl = (product: ShopProduct): string | null => {
@@ -230,6 +375,15 @@ export default function ProductList() {
                     </div>
 
                     <Button
+                        onClick={() => setShowExportDialog(true)}
+                        size="sm"
+                        variant="outline"
+                        className="text-sm"
+                    >
+                        <Download className="w-4 h-4 mr-1" />
+                        Export
+                    </Button>
+                    <Button
                         onClick={handleAddProduct}
                         size="sm"
                         className="bg-indigo-600 hover:bg-indigo-700 text-sm"
@@ -295,7 +449,8 @@ export default function ProductList() {
                                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
                                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Purchase Price</th>
+                                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Selling Price</th>
                                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax (%)</th>
                                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSN</th>
                                         <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
@@ -347,6 +502,9 @@ export default function ProductList() {
                                                 <div className="truncate" title={product.category?.title || '-'}>
                                                     {product.category?.title || '-'}
                                                 </div>
+                                            </td>
+                                            <td className="px-2 py-2 text-xs text-gray-900">
+                                                {product.purchase_price ? formatPrice(product.purchase_price) : '-'}
                                             </td>
                                             <td className="px-2 py-2 text-xs text-gray-900">
                                                 <div className="space-y-0.5">
@@ -549,6 +707,156 @@ export default function ProductList() {
                     </CardContent>
                 </Card>
             )}
+
+            {/* Export Dialog */}
+            <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Export Products</DialogTitle>
+                        <DialogDescription>
+                            Export products to Excel or PDF with optional filters
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        {/* Format Selection */}
+                        <div className="space-y-2">
+                            <Label>Export Format</Label>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant={exportFormat === 'excel' ? 'default' : 'outline'}
+                                    onClick={() => setExportFormat('excel')}
+                                    className="flex-1"
+                                >
+                                    <FileSpreadsheet className="w-4 h-4 mr-2" />
+                                    Excel
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={exportFormat === 'pdf' ? 'default' : 'outline'}
+                                    onClick={() => setExportFormat('pdf')}
+                                    className="flex-1"
+                                >
+                                    <FileText className="w-4 h-4 mr-2" />
+                                    PDF
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Category Filter */}
+                        <div className="space-y-2">
+                            <Label>Category</Label>
+                            <Select value={exportCategoryId} onValueChange={setExportCategoryId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="All Categories" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Categories</SelectItem>
+                                    {categories.map((cat) => (
+                                        <SelectItem key={cat.id} value={cat.id.toString()}>
+                                            {cat.title}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Vendor Filter */}
+                        <div className="space-y-2">
+                            <Label>Vendor/Seller ID</Label>
+                            <Input
+                                placeholder="Enter vendor ID or leave blank for all"
+                                value={exportVendorId === 'all' ? '' : exportVendorId}
+                                onChange={(e) => setExportVendorId(e.target.value || 'all')}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Leave blank to export all vendors. Enter a specific vendor UUID to filter.
+                            </p>
+                        </div>
+
+                        {/* Date Range */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Start Date (Optional)</Label>
+                                <Input
+                                    type="date"
+                                    value={exportStartDate}
+                                    onChange={(e) => setExportStartDate(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>End Date (Optional)</Label>
+                                <Input
+                                    type="date"
+                                    value={exportEndDate}
+                                    onChange={(e) => setExportEndDate(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Export Status */}
+                        {(exportStatus === 'PENDING' || exportStatus === 'PROGRESS') && (
+                            <div className="p-4 bg-blue-50 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span className="text-sm">
+                                        {exportStatus === 'PENDING' ? 'Preparing export...' : 'Generating export...'}
+                                    </span>
+                                </div>
+                                {exportProgress && (
+                                    <div className="mt-2">
+                                        <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                            <span>Progress</span>
+                                            <span>{exportProgress.current} / {exportProgress.total}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div
+                                                className="bg-blue-600 h-2 rounded-full transition-all"
+                                                style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-2 pt-4">
+                            <Button
+                                onClick={() => {
+                                    setShowExportDialog(false);
+                                    setExportTaskId(null);
+                                    setExportStatus('');
+                                    setExportProgress(null);
+                                }}
+                                variant="outline"
+                                className="flex-1"
+                                disabled={exportStatus === 'PENDING' || exportStatus === 'PROGRESS'}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleExportProducts}
+                                className="flex-1"
+                                disabled={exportStatus === 'PENDING' || exportStatus === 'PROGRESS'}
+                            >
+                                {exportStatus === 'PENDING' || exportStatus === 'PROGRESS' ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="w-4 h-4 mr-2" />
+                                        Export
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

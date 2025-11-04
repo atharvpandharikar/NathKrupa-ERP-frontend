@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Search, Package } from "lucide-react";
-import { shopProductsApi } from "@/lib/shop-api";
+import { shopProductsApi } from "@/lib/api";
 import type { ShopProduct } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
