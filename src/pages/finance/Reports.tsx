@@ -295,7 +295,7 @@ const Reports = () => {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="export-format">Export Report</Label>
+                            <Label htmlFor="export-format">Quick Export</Label>
                             <div className="flex gap-2">
                                 <Button
                                     variant="outline"
@@ -303,7 +303,7 @@ const Reports = () => {
                                     onClick={() => handleExportReport('excel')}
                                 >
                                     <Download className="h-4 w-4 mr-2" />
-                                    Download Excel
+                                    Quick Excel
                                 </Button>
                             </div>
                         </div>

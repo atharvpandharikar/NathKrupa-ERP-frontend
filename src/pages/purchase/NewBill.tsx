@@ -25,13 +25,17 @@ import {
     Plus,
     Trash2,
     Save,
-    Calculator
+    Calculator,
+    Trash
 } from "lucide-react";
 import { purchaseApi, type Vendor, type PurchaseBill } from "@/lib/api";
 import { shopProductsApi, type ShopProduct } from "@/lib/shop-api";
 import { toast } from "sonner";
 import AddProductForm from "@/components/AddProductForm";
 import { SearchableSelect, SearchableSelectOption } from "@/components/ui/searchable-select";
+
+// Price source tracking - proper way to know where price came from
+type PriceSource = 'manual' | 'vendor' | 'product-default';
 
 interface BillItem {
     id?: number;
@@ -42,11 +46,11 @@ interface BillItem {
     gst_percent: number;
     gst_amount: number;
     total: number;
+    priceSource?: PriceSource; // Track the source of the price
 }
 
-// LocalStorage key for drafts and inactivity timeout
+// LocalStorage key for drafts
 const DRAFT_KEY = 'purchase_new_bill_draft_v1';
-const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 // Helper function to convert products to SearchableSelectOption format
 const convertProductsToOptions = (products: ShopProduct[]): SearchableSelectOption[] => {
@@ -70,7 +74,6 @@ export default function NewBill() {
 
     // Draft/autosave refs
     const draftSaveTimerRef = useRef<number | null>(null);
-    const inactivityTimerRef = useRef<number | null>(null);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -88,7 +91,8 @@ export default function NewBill() {
             purchase_price: 0,
             gst_percent: 18,
             gst_amount: 0,
-            total: 0
+            total: 0,
+            priceSource: undefined
         }
     ]);
 
@@ -109,18 +113,7 @@ export default function NewBill() {
         draftSaveTimerRef.current = window.setTimeout(() => {
             saveDraftToStorage();
         }, 500);
-
-        // reset inactivity timer
-        if (inactivityTimerRef.current) {
-            window.clearTimeout(inactivityTimerRef.current);
-        }
-        inactivityTimerRef.current = window.setTimeout(() => {
-            // Auto-close: remove draft and navigate away
-            try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
-            toast.info('Draft expired and was closed due to inactivity');
-            navigate('/purchase/bills');
-        }, INACTIVITY_TIMEOUT_MS);
-    }, [saveDraftToStorage, navigate]);
+    }, [saveDraftToStorage]);
 
     // Load draft on mount
     useEffect(() => {
@@ -130,7 +123,14 @@ export default function NewBill() {
                 const parsed = JSON.parse(raw);
                 if (parsed && parsed.formData && parsed.items) {
                     setFormData(prev => ({ ...prev, ...parsed.formData }));
-                    setItems(parsed.items);
+                    // Restore items with their price sources from draft
+                    // If priceSource exists in draft, use it; otherwise infer from context
+                    const draftItems = parsed.items.map((item: BillItem) => ({
+                        ...item,
+                        // Preserve existing priceSource if present, otherwise mark as manual if price was set
+                        priceSource: item.priceSource || (item.purchase_price > 0 ? 'manual' : undefined)
+                    }));
+                    setItems(draftItems);
                     toast.success('Restored unsaved draft');
                 }
             }
@@ -138,21 +138,12 @@ export default function NewBill() {
             console.warn('Failed to load draft:', err);
         }
 
-        // start inactivity timer so draft will auto-close if user abandons
-        if (inactivityTimerRef.current) window.clearTimeout(inactivityTimerRef.current);
-        inactivityTimerRef.current = window.setTimeout(() => {
-            try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
-            toast.info('Draft expired and was closed due to inactivity');
-            navigate('/purchase/bills');
-        }, INACTIVITY_TIMEOUT_MS);
-
         return () => {
             if (draftSaveTimerRef.current) window.clearTimeout(draftSaveTimerRef.current);
-            if (inactivityTimerRef.current) window.clearTimeout(inactivityTimerRef.current);
         };
     }, [navigate]);
 
-    // Whenever form data or items change, schedule saving draft and reset inactivity timer
+    // Whenever form data or items change, schedule saving draft
     useEffect(() => {
         scheduleSaveDraft();
     }, [formData, items, scheduleSaveDraft]);
@@ -186,24 +177,33 @@ export default function NewBill() {
         return subtotal + gstAmount;
     };
 
+    // Centralized price resolution logic
+    const resolvePrice = (item: BillItem, source: PriceSource, price: number) => {
+        item.purchase_price = price;
+        item.priceSource = source;
+        // Recalculate totals
+        const subtotal = item.quantity * item.purchase_price;
+        item.gst_amount = (subtotal * item.gst_percent) / 100;
+        item.total = subtotal + item.gst_amount;
+    };
+
     // Function to fetch vendor price for a product
-    const fetchVendorPrice = async (vendorId: string, productId: string, index: number, itemsArray: BillItem[]) => {
+    const fetchVendorPrice = async (vendorId: string, productId: string, index: number, itemsArray: BillItem[], skipIfManual: boolean = true) => {
+        // Skip fetching if price was manually entered by user
+        if (skipIfManual && itemsArray[index].priceSource === 'manual') {
+            return;
+        }
+
         try {
             const response = await purchaseApi.vendorProductPrices.getPrice(parseInt(vendorId), productId);
             if (response.purchase_price) {
-                itemsArray[index].purchase_price = parseFloat(response.purchase_price);
-                // Recalculate totals
-                const subtotal = itemsArray[index].quantity * itemsArray[index].purchase_price;
-                itemsArray[index].gst_amount = (subtotal * itemsArray[index].gst_percent) / 100;
-                itemsArray[index].total = subtotal + itemsArray[index].gst_amount;
+                resolvePrice(itemsArray[index], 'vendor', parseFloat(response.purchase_price));
             } else {
                 // No vendor price found, use product's default
                 const selectedProduct = products.find(p => p.product_id === productId);
                 if (selectedProduct) {
-                    itemsArray[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
-                    const subtotal = itemsArray[index].quantity * itemsArray[index].purchase_price;
-                    itemsArray[index].gst_amount = (subtotal * itemsArray[index].gst_percent) / 100;
-                    itemsArray[index].total = subtotal + itemsArray[index].gst_amount;
+                    const defaultPrice = (selectedProduct as any).purchase_price || selectedProduct.price;
+                    resolvePrice(itemsArray[index], 'product-default', defaultPrice);
                 }
             }
         } catch (error) {
@@ -211,12 +211,13 @@ export default function NewBill() {
             // Fallback to product default price
             const selectedProduct = products.find(p => p.product_id === productId);
             if (selectedProduct) {
-                itemsArray[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
+                const defaultPrice = (selectedProduct as any).purchase_price || selectedProduct.price;
+                resolvePrice(itemsArray[index], 'product-default', defaultPrice);
             }
         }
     };
 
-    const updateItem = (index: number, field: keyof BillItem, value: any) => {
+    const updateItem = async (index: number, field: keyof BillItem, value: any) => {
         const newItems = [...items];
         newItems[index] = { ...newItems[index], [field]: value };
 
@@ -228,14 +229,23 @@ export default function NewBill() {
                 // Auto-detect GST% from product's taxes field, default to 18% if not available
                 newItems[index].gst_percent = selectedProduct.taxes ?? 18;
 
-                // Fetch vendor price if vendor is already selected
-                if (formData.vendor_id) {
-                    fetchVendorPrice(formData.vendor_id, value, index, newItems);
-                } else {
-                    // Use purchase_price if available, otherwise use price as fallback
-                    newItems[index].purchase_price = (selectedProduct as any).purchase_price || selectedProduct.price;
+                // Only auto-fetch price if it wasn't manually entered (new product selection)
+                if (newItems[index].priceSource !== 'manual') {
+                    // Fetch vendor price if vendor is already selected
+                    if (formData.vendor_id) {
+                        await fetchVendorPrice(formData.vendor_id, value, index, newItems, false);
+                    } else {
+                        // Use purchase_price if available, otherwise use price as fallback
+                        const defaultPrice = (selectedProduct as any).purchase_price || selectedProduct.price;
+                        resolvePrice(newItems[index], 'product-default', defaultPrice);
+                    }
                 }
             }
+        }
+
+        // If purchase_price is manually changed, mark it as manually entered
+        if (field === 'purchase_price') {
+            newItems[index].priceSource = 'manual';
         }
 
         // Recalculate totals
@@ -255,7 +265,8 @@ export default function NewBill() {
             purchase_price: 0,
             gst_percent: 18,
             gst_amount: 0,
-            total: 0
+            total: 0,
+            priceSource: undefined
         }]);
     };
 
@@ -359,21 +370,51 @@ export default function NewBill() {
     }
 
     return (
-        <div className="p-6 space-y-6">
+        <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate('/purchase/bills')}
-                >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Bills
-                </Button>
-                <div className="flex-1">
-                    <h1 className="text-3xl font-bold text-gray-900">Create New Bill</h1>
-                    <p className="text-gray-600 mt-1">Add a new purchase bill</p>
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate('/purchase/bills')}
+                    >
+                        <ArrowLeft className="h-4 w-4 mr-2" />
+                        Back to Bills
+                    </Button>
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">Create New Bill</h1>
+                        <p className="text-red-600 mt-1">Add a new purchase bill</p>
+                    </div>
                 </div>
+                <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => {
+                        try { localStorage.removeItem(DRAFT_KEY); } catch (e) { }
+                        setFormData({
+                            vendor_id: "",
+                            bill_date: new Date().toISOString().split('T')[0],
+                            bill_number: "",
+                            discount: 0,
+                            notes: ""
+                        });
+                        setItems([{
+                            product_id: undefined,
+                            quantity: 1,
+                            purchase_price: 0,
+                            gst_percent: 18,
+                            gst_amount: 0,
+                            total: 0,
+                            priceSource: undefined
+                        }]);
+                        toast.success('Draft cleared successfully');
+                    }}
+                >
+                    <Trash className="h-4 w-4 mr-2" />
+                    Clear Draft
+                </Button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -388,15 +429,20 @@ export default function NewBill() {
                                 <Label htmlFor="vendor">Vendor *</Label>
                                 <Select
                                     value={formData.vendor_id}
-                                    onValueChange={(value) => {
+                                    onValueChange={async (value) => {
                                         setFormData({ ...formData, vendor_id: value });
                                         // Fetch vendor prices for all selected products when vendor changes
+                                        // But only if prices weren't manually entered
                                         if (value) {
-                                            items.forEach((item, idx) => {
-                                                if (item.product_id) {
-                                                    fetchVendorPrice(value, item.product_id, idx, [...items]);
+                                            const updatedItems = [...items];
+                                            const fetchPromises = items.map((item, idx) => {
+                                                if (item.product_id && item.priceSource !== 'manual') {
+                                                    return fetchVendorPrice(value, item.product_id, idx, updatedItems, false);
                                                 }
+                                                return Promise.resolve();
                                             });
+                                            await Promise.all(fetchPromises);
+                                            setItems(updatedItems);
                                         }
                                     }}
                                 >

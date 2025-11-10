@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,9 +20,14 @@ import {
     Download,
     FileSpreadsheet,
     FileText,
-    Loader2
+    Loader2,
+    RefreshCw,
+    History
 } from "lucide-react";
-import { shopProductsApi, shopCategoriesApi, ShopProduct, SHOP_API_ROOT } from '@/lib/shop-api';
+import { shopProductsApi, shopCategoriesApi, ShopProduct, SHOP_API_ROOT, getTokens } from '@/lib/shop-api';
+import { exportService, ExportJob } from '@/services/exportService';
+import { useToast } from '@/hooks/use-toast';
+import { useExportNotifications } from '@/context/ExportNotificationContext';
 import {
     Dialog,
     DialogContent,
@@ -35,6 +40,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export default function ProductList() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const { toast } = useToast();
+    const { trackJob } = useExportNotifications();
+    const isInitialMount = useRef(true);
+    const previousPathname = useRef<string>('');
     const [products, setProducts] = useState<ShopProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -49,72 +59,55 @@ export default function ProductList() {
     const [exportCategoryId, setExportCategoryId] = useState<string>('all');
     const [exportStartDate, setExportStartDate] = useState<string>('');
     const [exportEndDate, setExportEndDate] = useState<string>('');
-    const [exportTaskId, setExportTaskId] = useState<string | null>(null);
-    const [exportStatus, setExportStatus] = useState<string>('');
-    const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
+    const [currentExportJob, setCurrentExportJob] = useState<ExportJob | null>(null);
     const [categories, setCategories] = useState<any[]>([]);
 
+    // Load products and categories on initial mount
     useEffect(() => {
         loadProducts();
         loadCategories();
-
-        // Refetch products when the window gets focus
-        const handleFocus = () => {
-            console.log('🔄 Window focused, reloading products...');
-            loadProducts();
-        };
-
-        window.addEventListener('focus', handleFocus);
-
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-        };
+        previousPathname.current = location.pathname;
+        isInitialMount.current = false;
     }, []);
 
+    // Refresh data when navigating back from add/edit pages
     useEffect(() => {
-        // Poll for export status if task is running
-        if (exportTaskId && (exportStatus === 'PENDING' || exportStatus === 'PROGRESS')) {
-            const interval = setInterval(async () => {
-                try {
-                    const status = await shopProductsApi.getExportStatus(exportTaskId);
-                    setExportStatus(status.status);
-                    if (status.info?.current && status.info?.total) {
-                        setExportProgress({ current: status.info.current, total: status.info.total });
-                    }
-                    if (status.status === 'SUCCESS' && status.result?.file_path) {
-                        // Download the file
-                        let fileUrl = status.result.file_path;
-                        // Check if file_path is already a full URL (starts with http:// or https://)
-                        // Otherwise prepend SHOP_API_ROOT
-                        if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
-                            // It's a relative path, prepend the API root
-                            fileUrl = `${SHOP_API_ROOT}${fileUrl}`;
-                        }
-                        // Create a temporary link and trigger download
-                        const link = document.createElement('a');
-                        link.href = fileUrl;
-                        link.download = ''; // Let browser determine filename
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        setShowExportDialog(false);
-                        setExportTaskId(null);
-                        setExportStatus('');
-                        setExportProgress(null);
-                    } else if (status.status === 'FAILURE') {
-                        alert('Export failed. Please try again.');
-                        setExportTaskId(null);
-                        setExportStatus('');
-                        setExportProgress(null);
-                    }
-                } catch (error) {
-                    console.error('Error checking export status:', error);
-                }
-            }, 2000); // Poll every 2 seconds
-
-            return () => clearInterval(interval);
+        // Skip on initial mount (already loaded above)
+        if (isInitialMount.current) {
+            previousPathname.current = location.pathname;
+            return;
         }
-    }, [exportTaskId, exportStatus]);
+
+        const currentPath = location.pathname;
+        const prevPath = previousPathname.current;
+
+        // Refresh if we're navigating back to the product list page from add/edit pages
+        const isProductListPage = currentPath === '/user-admin/products';
+        const isFromAddEdit = prevPath.includes('/products/add') || prevPath.includes('/products/edit');
+
+        if (isProductListPage && isFromAddEdit && prevPath !== currentPath) {
+            console.log('🔄 Returning from add/edit page, refreshing products...');
+            loadProducts();
+        }
+
+        // Update previous pathname
+        previousPathname.current = currentPath;
+    }, [location.pathname]);
+
+    // Update local job state (notifications handled globally by ExportNotificationProvider)
+    useEffect(() => {
+        const unsubscribe = exportService.subscribe((job) => {
+            if (currentExportJob && job.taskId === currentExportJob.taskId) {
+                setCurrentExportJob(job);
+                // Clear local state when job completes (notifications handled globally)
+                if (job.status === 'SUCCESS' || job.status === 'FAILURE') {
+                    setCurrentExportJob(null);
+                }
+            }
+        });
+
+        return unsubscribe;
+    }, [currentExportJob]);
 
     const loadCategories = async () => {
         try {
@@ -178,13 +171,75 @@ export default function ProductList() {
         navigate('/user-admin/products/add');
     };
 
-    const handleExportProducts = async () => {
+    // Helper function to download files with authentication
+    const downloadAuthenticatedFile = async (url: string, defaultFilename: string) => {
         try {
-            setExportStatus('PENDING');
-            setExportTaskId(null);
-            setExportProgress(null);
+            const tokens = getTokens();
 
-            const response = await shopProductsApi.exportProducts({
+            if (!tokens?.access) {
+                alert("Authentication required. Please log in again.");
+                return;
+            }
+
+            const response = await fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${tokens.access}`,
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    alert("Session expired. Please log in again.");
+                } else if (response.status === 404) {
+                    alert("File not found. The report may have been deleted.");
+                } else {
+                    alert(`Failed to download: ${response.statusText}`);
+                }
+                return;
+            }
+
+            // Get filename from Content-Disposition header or use default
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = defaultFilename;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i);
+                if (filenameMatch) {
+                    filename = filenameMatch[1];
+                }
+            }
+
+            // Download the file
+            const blob = await response.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            console.error('Download error:', error);
+            alert('Failed to download report. Please try again.');
+        }
+    };
+
+    const handleExportProducts = async () => {
+        // Close dialog immediately
+        setShowExportDialog(false);
+
+        // Show notification immediately after dialog closes (small delay to ensure UI updates)
+        setTimeout(() => {
+            toast({
+                title: 'Export Request Submitted',
+                description: 'Your export request is being processed in the background. You can continue working and we will notify you when it\'s ready for download.',
+                variant: 'info',
+                duration: 6000,
+            });
+        }, 100);
+
+        try {
+            const taskId = await exportService.startExport({
                 format: exportFormat,
                 vendor_id: exportVendorId !== 'all' ? exportVendorId : undefined,
                 category_id: exportCategoryId !== 'all' ? exportCategoryId : undefined,
@@ -192,45 +247,11 @@ export default function ProductList() {
                 end_date: exportEndDate || undefined,
             });
 
-            console.log('Export response:', response);
-
-            // Check for errors first
-            if (response.error) {
-                const errorMsg = response.message || response.error || 'Failed to export products';
-                alert(`Export failed: ${errorMsg}`);
-                setExportStatus('');
-                return;
-            }
-
-            // Handle async task (when Redis is available)
-            if (response.task_id) {
-                setExportTaskId(response.task_id);
-                setExportStatus('PENDING');
-            }
-            // Handle synchronous result (when Redis is not available)
-            else if (response.file_path) {
-                // Check if file_path is already a full URL (starts with http:// or https://)
-                // Otherwise prepend SHOP_API_ROOT
-                let fileUrl = response.file_path;
-                if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
-                    // It's a relative path, prepend the API root
-                    fileUrl = `${SHOP_API_ROOT}${fileUrl}`;
-                }
-                console.log('Opening file URL:', fileUrl);
-                // Create a temporary link and trigger download
-                const link = document.createElement('a');
-                link.href = fileUrl;
-                link.download = ''; // Let browser determine filename
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                setShowExportDialog(false);
-                setExportStatus('');
-            } else {
-                // Unexpected response format
-                console.error('Unexpected response format:', response);
-                alert('Export completed but file path not found. Please check the console.');
-                setExportStatus('');
+            const job = exportService.getJob(taskId);
+            if (job) {
+                setCurrentExportJob(job);
+                // Track this job globally for notifications (works on all pages)
+                trackJob(taskId);
             }
         } catch (error: any) {
             console.error('Error exporting products:', error);
@@ -238,8 +259,12 @@ export default function ProductList() {
                 error?.response?.data?.error ||
                 error?.message ||
                 'Failed to export products. Please try again.';
-            alert(errorMessage);
-            setExportStatus('');
+            toast({
+                title: 'Export Failed',
+                description: errorMessage,
+                variant: 'error',
+                duration: 5000,
+            });
         }
     };
 
@@ -374,6 +399,28 @@ export default function ProductList() {
                         </Button>
                     </div>
 
+                    <Button
+                        onClick={() => {
+                            console.log('🔄 Manual refresh triggered');
+                            loadProducts();
+                        }}
+                        size="sm"
+                        variant="outline"
+                        className="text-sm"
+                        disabled={loading}
+                    >
+                        <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </Button>
+                    <Button
+                        onClick={() => navigate('/user-admin/export-history')}
+                        size="sm"
+                        variant="outline"
+                        className="text-sm"
+                    >
+                        <History className="w-4 h-4 mr-1" />
+                        History
+                    </Button>
                     <Button
                         onClick={() => setShowExportDialog(true)}
                         size="sm"
@@ -795,63 +842,35 @@ export default function ProductList() {
                             </div>
                         </div>
 
-                        {/* Export Status */}
-                        {(exportStatus === 'PENDING' || exportStatus === 'PROGRESS') && (
-                            <div className="p-4 bg-blue-50 rounded-lg">
-                                <div className="flex items-center gap-2">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span className="text-sm">
-                                        {exportStatus === 'PENDING' ? 'Preparing export...' : 'Generating export...'}
-                                    </span>
+                        {/* Info Message */}
+                        <div className="p-4 bg-blue-50 rounded-lg">
+                            <div className="flex items-start gap-2">
+                                <div className="text-sm text-blue-800">
+                                    <p className="font-medium mb-1">Background Processing</p>
+                                    <p className="text-xs">
+                                        Your export will process in the background. You can continue working and will be notified when it's ready.
+                                    </p>
                                 </div>
-                                {exportProgress && (
-                                    <div className="mt-2">
-                                        <div className="flex justify-between text-xs text-gray-600 mb-1">
-                                            <span>Progress</span>
-                                            <span>{exportProgress.current} / {exportProgress.total}</span>
-                                        </div>
-                                        <div className="w-full bg-gray-200 rounded-full h-2">
-                                            <div
-                                                className="bg-blue-600 h-2 rounded-full transition-all"
-                                                style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
                             </div>
-                        )}
+                        </div>
 
                         {/* Actions */}
                         <div className="flex gap-2 pt-4">
                             <Button
                                 onClick={() => {
                                     setShowExportDialog(false);
-                                    setExportTaskId(null);
-                                    setExportStatus('');
-                                    setExportProgress(null);
                                 }}
                                 variant="outline"
                                 className="flex-1"
-                                disabled={exportStatus === 'PENDING' || exportStatus === 'PROGRESS'}
                             >
                                 Cancel
                             </Button>
                             <Button
                                 onClick={handleExportProducts}
                                 className="flex-1"
-                                disabled={exportStatus === 'PENDING' || exportStatus === 'PROGRESS'}
                             >
-                                {exportStatus === 'PENDING' || exportStatus === 'PROGRESS' ? (
-                                    <>
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                        Processing...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Download className="w-4 h-4 mr-2" />
-                                        Export
-                                    </>
-                                )}
+                                <Download className="w-4 h-4 mr-2" />
+                                Start Export
                             </Button>
                         </div>
                     </div>

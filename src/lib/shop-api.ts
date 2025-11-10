@@ -426,6 +426,24 @@ export const shopProductsApi = {
         const response = await shopApi.get<any>(`/export-products/${taskId}/`);
         return response;
     },
+
+    getExportHistory: async (params?: {
+        status?: string;
+        format?: string;
+        limit?: number;
+        offset?: number;
+    }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.status) queryParams.append('status', params.status);
+        if (params?.format) queryParams.append('format', params.format);
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.offset) queryParams.append('offset', params.offset.toString());
+
+        const queryString = queryParams.toString();
+        const url = `/export-history/${queryString ? `?${queryString}` : ''}`;
+        const response = await shopApi.get<any>(url);
+        return response;
+    },
 };
 
 export const shopCategoriesApi = {

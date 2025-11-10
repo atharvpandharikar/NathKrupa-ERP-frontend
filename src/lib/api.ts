@@ -17,7 +17,7 @@ const SHOP_BASE = `${API_ROOT}/api/shop`;
 // Inventory API base (inventory is under shop/)
 const INVENTORY_BASE = `${API_ROOT}/api/shop/inventory`;
 // Finance API base
-const FINANCE_BASE = `${API_ROOT}/api/finance`;
+export const FINANCE_BASE = `${API_ROOT}/api/finance`;
 // Purchase API base
 const PURCHASE_BASE = `${API_ROOT}/api/purchase`;
 type Tokens = { access: string; refresh: string };
@@ -250,6 +250,23 @@ export const financeApi = {
 
       return response.json();
     }
+  },
+
+  // Export transactions
+  exportTransactions: async (params: {
+    format: 'excel' | 'pdf';
+    account_id?: string;
+    from_date?: string;
+    to_date?: string;
+    transaction_type?: 'Credit' | 'Debit' | 'Both';
+  }) => {
+    const response = await financeApi.post<any>('/export-transactions/', params);
+    return response;
+  },
+
+  getExportStatus: async (taskId: string) => {
+    const response = await financeApi.get<any>(`/export-transactions/${taskId}/`);
+    return response;
   },
 };
 
@@ -1067,8 +1084,8 @@ export const customerProductPricesApi = {
     if (params?.customer) queryParams.append('customer', params.customer);
     if (params?.product) queryParams.append('product', params.product);
     if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString());
-    
-    const url = queryParams.toString() 
+
+    const url = queryParams.toString()
       ? `/customer-product-prices/?${queryParams.toString()}`
       : '/customer-product-prices/';
     const response = await shopApi.get<CustomerProductPrice[]>(url);

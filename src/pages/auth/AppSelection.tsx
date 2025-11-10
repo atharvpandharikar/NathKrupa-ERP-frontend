@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Building2, Calculator, ShoppingCart, ArrowLeft, Package, LogOut, Search, Loader2, Warehouse } from "lucide-react";
+import { Building2, Calculator, ShoppingCart, ArrowLeft, Package, LogOut, Search, Loader2, Warehouse, Database } from "lucide-react";
 import React from 'react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -32,6 +32,9 @@ export default function AppSelection() {
                 break;
             case 'search-parts':
                 navigate('/search-parts');
+                break;
+            case 'data':
+                navigate('/user-admin/export-history');
                 break;
             default:
                 break;
@@ -92,6 +95,15 @@ export default function AppSelection() {
             bgColor: 'bg-indigo-50',
             iconColor: 'text-indigo-600',
             hoverBg: 'hover:bg-indigo-100'
+        },
+        {
+            id: 'data',
+            name: 'Data',
+            icon: Database,
+            color: 'teal',
+            bgColor: 'bg-teal-50',
+            iconColor: 'text-teal-600',
+            hoverBg: 'hover:bg-teal-100'
         }
     ];
 
