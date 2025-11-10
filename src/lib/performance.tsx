@@ -1,4 +1,5 @@
 // Performance monitoring and optimization utilities
+import React from 'react';
 
 interface PerformanceMetrics {
     pageLoadTime: number;
@@ -137,7 +138,7 @@ export const withPerformanceMonitoring = <P extends object>(
             return () => endRender();
         });
 
-        return <WrappedComponent { ...props } />;
+        return <WrappedComponent {...props} />;
     });
 };
 
