@@ -70,8 +70,11 @@ export default function Accounts() {
     const fetchAccounts = async () => {
         try {
             setLoading(true);
-            const data = await financeApi.get<Account[]>('/accounts/');
-            setAccounts(data);
+            // Handle pagination - accounts API returns paginated response
+            const response = await financeApi.get<any>('/accounts/?page_size=1000');
+            // Extract results from paginated response or use array directly
+            const accountsData = Array.isArray(response) ? response : (response.results || []);
+            setAccounts(accountsData);
         } catch (error) {
             console.error('Error fetching accounts:', error);
         } finally {

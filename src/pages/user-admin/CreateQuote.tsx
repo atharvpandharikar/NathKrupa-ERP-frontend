@@ -101,6 +101,7 @@ const createEmptyItem = (id: number): QuoteItem => ({
     taxPercentage: DEFAULT_TAX,
     taxAmount: 0,
     total: 0,
+    unit: null,
 });
 
 const formatDate = (date: Date): string => {
@@ -542,6 +543,9 @@ export function CreateQuote() {
             }
         }
 
+        // Get unit from product if available
+        const productUnit = (product as any).unit;
+        
         const updates: Partial<QuoteItem> = {
             productName: selectedVariant ? selectedVariant.title : product.title,
             product_id: product.product_id,
@@ -550,6 +554,7 @@ export function CreateQuote() {
             listPrice: finalPrice, // Use discounted price
             quantity: 1,
             taxPercentage,
+            unit: productUnit || null, // Set unit from product
         };
 
         updateItem(itemId, updates);
@@ -872,6 +877,7 @@ export function CreateQuote() {
                                             <TableHead className="w-[100px] text-center">
                                                 Qty
                                             </TableHead>
+                                            <TableHead className="w-20 text-center">Unit</TableHead>
                                             <TableHead className="w-28 text-right">
                                                 Price (₹)
                                             </TableHead>
@@ -926,6 +932,9 @@ export function CreateQuote() {
                                                         className="w-[50px] text-center"
                                                         min="1"
                                                     />
+                                                </TableCell>
+                                                <TableCell className="py-4 text-center text-sm text-muted-foreground">
+                                                    {item.unit?.code || 'N/A'}
                                                 </TableCell>
                                                 <TableCell className="py-4">
                                                     <Input

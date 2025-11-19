@@ -157,6 +157,9 @@ export const financeApi = {
   del: <T>(path: string) => request<T>(FINANCE_BASE, path, { method: "DELETE" }),
   postForm: <T>(path: string, form: FormData) => request<T>(FINANCE_BASE, path, { method: "POST", body: form }),
 
+  // OPTIMIZATION: Lightning-fast transaction search powered by Typesense
+  searchTransactions: (query: string) => request<{ count: number; results: any[]; search_time_ms: number }>(FINANCE_BASE, `/transactions/search/?q=${encodeURIComponent(query)}`),
+
   // Create a finance transaction for manufacturing payment
   createManufacturingPayment: async (payment: {
     bill_number: string;
@@ -535,6 +538,8 @@ export type CustomerAddress = {
 export const customersApi = {
   // List customers; when search provided uses DRF SearchFilter (?search=term)
   list: (search?: string) => api.get<Paginated<Customer> | Customer[]>(`/customers/${search ? `?search=${encodeURIComponent(search)}` : ''}`),
+  // OPTIMIZATION: Lightning-fast search powered by Typesense (<100ms)
+  search: (query: string) => api.get<{ count: number; results: Customer[]; search_time_ms: number }>(`/customers/search/?q=${encodeURIComponent(query)}`),
   create: (payload: { name: string; phone_number: string; whatsapp_number?: string; email?: string; address?: string }) => api.post<Customer>('/customers/', payload),
   update: (id: number, payload: Partial<{ name: string; phone_number: string; whatsapp_number?: string | null; email?: string | null; address?: string | null; org_id?: string | null; gst_id?: string | null }>) => api.patch<Customer>(`/customers/${id}/`, payload),
   get: (id: number) => api.get<Customer>(`/customers/${id}/`),
@@ -552,12 +557,15 @@ export const customerAddressesApi = {
 export const quotationApi = {
   list: () => api.get<Paginated<QuotationData> | QuotationData[]>('/quotations/'),
   getById: (id: number) => api.get<QuotationData>(`/quotations/${id}/`),
+  // OPTIMIZATION: Use Typesense for instant search
+  search: (query: string) => api.get<{ count: number; results: QuotationData[]; search_time_ms: number }>(`/quotations/search/?q=${encodeURIComponent(query)}`),
   searchByNumber: (query: string) => api.get<Paginated<QuotationData>>(`/quotations/?search=${encodeURIComponent(query)}`),
   listDiscounts: (qid: number) => api.get<{ items: QuotationDiscount[]; base_total: number; total_discount: number; discounted_total: number }>(`/quotations/${qid}/discounts/`),
   addDiscount: (qid: number, payload: { mode: 'amount' | 'percent'; value: number; note?: string }) => api.post(`/quotations/${qid}/discounts/`, payload),
   approveDiscount: (qid: number, did: number) => api.post(`/quotations/${qid}/discounts/${did}/approve/`, {}),
   rejectDiscount: (qid: number, did: number) => api.post(`/quotations/${qid}/discounts/${did}/reject/`, {}),
   addFeature: (qid: number, payload: { feature_type_id?: number; feature_category_id?: number; name?: string; quantity: number; unit_price?: number }) => api.post(`/quotations/${qid}/add_feature/`, payload),
+  sendWhatsapp: (id: number) => api.post<{ success: boolean; message: string; message_id?: string }>(`/quotations/${id}/send_whatsapp/`, {}),
 };
 
 export type QuotationData = { // Export QuotationData
@@ -595,6 +603,10 @@ export const workOrdersApi = {
   list: () => api.get<Paginated<WorkOrder> | WorkOrder[]>('/work-orders/'),
   getById: (id: number) => api.get<WorkOrder>(`/work-orders/${id}/`),
   get: (id: number) => api.get<WorkOrder>(`/work-orders/${id}/`),
+  // OPTIMIZATION: Lightning-fast search powered by Typesense (<100ms)
+  search: (query: string) => api.get<{ count: number; results: WorkOrder[]; search_time_ms: number }>(`/work-orders/search/?q=${encodeURIComponent(query)}`),
+  // ROOT CAUSE FIX: Lightweight counts endpoint - returns only counts, not full data
+  counts: () => api.get<{ total: number; scheduled: number; in_progress: number; completed: number; cancelled: number }>('/work-orders/counts/'),
   create: (payload: { quotation_id: number; work_order_date: string; appointment_date: string; estimated_completion_days: number; booking_amount?: number; }) => api.post<WorkOrder>('/work-orders/', payload),
   updateStatus: (id: number, action: string, data?: any) => {
     switch (action) {
@@ -632,11 +644,30 @@ export const workOrdersApi = {
   addPayment: (bill_id: number, payment: { payment_type: string; amount: number; payment_method?: string; reference_number?: string; notes?: string; }) => api.post(`/payments/`, { bill_id, ...payment }),
 };
 
+// ROOT CAUSE FIX: Dashboard stats endpoint - returns aggregated data instead of fetching all records
+export const dashboardApi = {
+  stats: () => api.get<{
+    total_customers: number;
+    total_quotations: number;
+    total_bills: number;
+    monthly_revenue: number;
+    recent_activity: Array<{
+      type: string;
+      message: string;
+      time_display: string;
+      icon: string;
+    }>;
+  }>('/dashboard-stats/'),
+};
+
 export const billsApi = {
   list: () => api.get<Paginated<Bill> | Bill[]>('/bills/'),
+  // OPTIMIZATION: Lightning-fast search powered by Typesense (<100ms)
+  search: (query: string, includeTest = false) => api.get<{ count: number; results: Bill[]; search_time_ms: number }>(`/bills/search/?q=${encodeURIComponent(query)}${includeTest ? '&include_test=true' : ''}`),
   getById: (id: number) => api.get<Bill>(`/bills/${id}/`),
   get: (id: number) => api.get<Bill>(`/bills/${id}/`),
   create: (data: any) => api.post<Bill>('/bills/', data),
+  sendWhatsapp: (id: number) => api.post<{ success: boolean; message: string; message_id?: string }>(`/bills/${id}/send_whatsapp/`, {}),
 };
 
 // paymentsApi removed - all payments now handled through finance app
@@ -846,7 +877,8 @@ export const purchaseApi = {
     create: (data: Partial<Vendor>) => purchaseApiBase.post<Vendor>('/vendors/', data),
     update: (id: number, data: Partial<Vendor>) => purchaseApiBase.put<Vendor>(`/vendors/${id}/`, data),
     delete: (id: number) => purchaseApiBase.del(`/vendors/${id}/`),
-    search: (query: string) => purchaseApiBase.get<Vendor[]>(`/vendors/search_by_name/?name=${query}`),
+    // OPTIMIZATION: Lightning-fast search powered by Typesense (<100ms)
+    search: (query: string) => purchaseApiBase.get<{ count: number; results: Vendor[]; search_time_ms: number }>(`/vendors/search/?q=${encodeURIComponent(query)}`),
     bills: (id: number) => purchaseApiBase.get<PurchaseBill[]>(`/vendors/${id}/bills/`),
     payments: (id: number) => purchaseApiBase.get<PurchasePayment[]>(`/vendors/${id}/payments/`),
     addPayment: (id: number, data: any) => purchaseApiBase.post<PurchasePayment>(`/vendors/${id}/add_payment/`, data),
@@ -861,6 +893,8 @@ export const purchaseApi = {
     create: (data: any) => purchaseApiBase.post<PurchaseBill>('/bills/', data),
     update: (id: number, data: Partial<PurchaseBill>) => purchaseApiBase.put<PurchaseBill>(`/bills/${id}/`, data),
     delete: (id: number) => purchaseApiBase.del(`/bills/${id}/`),
+    // OPTIMIZATION: Lightning-fast search powered by Typesense (<100ms)
+    search: (query: string) => purchaseApiBase.get<{ count: number; results: PurchaseBill[]; search_time_ms: number }>(`/bills/search/?q=${encodeURIComponent(query)}`),
     recent: (limit = 10) => purchaseApiBase.get<PurchaseBill[]>(`/bills/recent/?limit=${limit}`),
     byStatus: (status: string) => purchaseApiBase.get<PurchaseBill[]>(`/bills/by_status/?status=${status}`),
     addPayment: (id: number, data: any) => purchaseApiBase.post<any>(`/bills/${id}/add_payment/`, data),
@@ -922,13 +956,14 @@ export const purchaseApi = {
       const searchParams = new URLSearchParams();
       if (params) {
         Object.entries(params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
+          if (value !== undefined && value !== null && value !== '') {
             searchParams.append(key, value.toString());
           }
         });
       }
       const query = searchParams.toString();
-      return purchaseApiBase.get<any[]>(`/vendor-product-prices/${query ? `?${query}` : ''}`);
+      // Handle paginated response: { count, next, previous, results }
+      return purchaseApiBase.get<{ count: number; next: string | null; previous: string | null; results: any[] }>(`/vendor-product-prices/${query ? `?${query}` : ''}`);
     },
     get: (id: number) => purchaseApiBase.get<any>(`/vendor-product-prices/${id}/`),
     create: (data: any) => purchaseApiBase.post<any>('/vendor-product-prices/', data),

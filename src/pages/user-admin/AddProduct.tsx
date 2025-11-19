@@ -799,12 +799,9 @@ export default function AddProduct() {
             formData.append('lead_time', (data.lead_time || 0).toString());
             formData.append('rating', (data.rating || 0).toString());
 
-            // Add organization ID from localStorage
+            // Add organization ID from localStorage (send as header, not in FormData)
             const orgId = localStorage.getItem('dev_organization_id') || localStorage.getItem('nk:activeOrganizationId');
-            if (orgId) {
-                formData.append('organization', orgId);
-                console.log('🏢 Adding organization to FormData:', orgId);
-            } else {
+            if (!orgId) {
                 console.warn('⚠️ No organization ID found in localStorage');
             }
 
@@ -897,7 +894,35 @@ export default function AddProduct() {
                             statusText: xhr.statusText,
                         }));
                     } else {
-                        reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+                        // Try to parse error response as JSON
+                        let errorMessage = `HTTP ${xhr.status}: ${xhr.statusText}`;
+                        try {
+                            const errorData = JSON.parse(xhr.responseText);
+                            if (errorData.message) {
+                                errorMessage = errorData.message;
+                                if (errorData.details) {
+                                    if (typeof errorData.details === 'object') {
+                                        const detailMessages = Object.entries(errorData.details)
+                                            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+                                            .join('; ');
+                                        errorMessage += ` - ${detailMessages}`;
+                                    } else {
+                                        errorMessage += ` - ${errorData.details}`;
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            // If parsing fails, use the response text if available
+                            if (xhr.responseText) {
+                                errorMessage = xhr.responseText;
+                            }
+                        }
+                        const error = new Error(errorMessage);
+                        (error as any).response = new Response(xhr.responseText, {
+                            status: xhr.status,
+                            statusText: xhr.statusText,
+                        });
+                        reject(error);
                     }
                 });
 
@@ -924,17 +949,43 @@ export default function AddProduct() {
                 throw new Error('Authentication required');
             }
 
-            const result = await response.json();
-            console.log('API Response:', result);
+            let result;
+            try {
+                result = await response.json();
+                console.log('API Response:', result);
+            } catch (e) {
+                // If response is not JSON, throw the error from the xhr handler
+                throw new Error(`Failed to parse response: ${response.statusText}`);
+            }
 
             if (!response.ok) {
-                throw new Error(result.message || `HTTP ${response.status}`);
+                // Extract error message from backend response
+                let errorMessage = 'Failed to create product';
+                if (result.error && result.message) {
+                    errorMessage = result.message;
+                    // Add details if available
+                    if (result.details) {
+                        if (typeof result.details === 'object') {
+                            // If details is an object (validation errors), format it
+                            const detailMessages = Object.entries(result.details)
+                                .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+                                .join('; ');
+                            errorMessage += ` - ${detailMessages}`;
+                        } else {
+                            errorMessage += ` - ${result.details}`;
+                        }
+                    }
+                } else if (result.message) {
+                    errorMessage = result.message;
+                }
+                throw new Error(errorMessage);
             }
             toast.success('Product created successfully!');
             navigate('/user-admin/products');
         } catch (error) {
             console.error('Error creating product:', error);
-            toast.error('Failed to create product');
+            const errorMessage = error instanceof Error ? error.message : 'Failed to create product';
+            toast.error(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -1094,19 +1145,6 @@ export default function AddProduct() {
 
                                                                             // Build full breadcrumb label
                                                                             const label = getCategoryBreadcrumbLabel(c) || (parentTitle ? `${parentTitle} -> ${c.title}` : c.title);
-
-                                                                            // Debug logging for first few items
-                                                                            if (categories.indexOf(category) < 3) {
-                                                                                console.log(`Category ${c.title}:`, {
-                                                                                    parent: c.parent,
-                                                                                    parent_title: c.parent_title,
-                                                                                    parent_name: c.parent_name,
-                                                                                    parent_category: c.parent_category,
-                                                                                    parent_id: c.parent_id,
-                                                                                    resolved_parent: parentTitle,
-                                                                                    final_label: label
-                                                                                });
-                                                                            }
 
                                                                             return (
                                                                                 <CommandItem
@@ -1350,7 +1388,7 @@ export default function AddProduct() {
                                             render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>Default Unit</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value}>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
                                                         <FormControl>
                                                             <SelectTrigger>
                                                                 <SelectValue placeholder="Select unit" />
@@ -1690,7 +1728,7 @@ export default function AddProduct() {
                                                                     // Clear group when variants are selected
                                                                     form.setValue('compatibility_group_id', '');
                                                                 }}
-                                                                value={selectedCarMaker}
+                                                                value={selectedCarMaker || ''}
                                                             >
                                                                 <SelectTrigger>
                                                                     <SelectValue placeholder="Select car maker" />

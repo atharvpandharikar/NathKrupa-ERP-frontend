@@ -38,6 +38,7 @@ export interface QuoteItem {
     variant_id?: string;
     selectedVariant?: ProductVariant;
     hsnCode?: string; // HSN code for the product
+    unit?: { id: number; name: string; code: string; is_decimal: boolean } | null; // Unit of measurement
 }
 
 export interface BillTo {

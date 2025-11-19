@@ -35,13 +35,21 @@ export default function VendorPayments() {
 
             try {
                 setLoading(true);
+                
+                // Validate id is a valid number
+                const vendorId = parseInt(id);
+                if (isNaN(vendorId)) {
+                    toast({ title: 'Invalid vendor ID', variant: 'destructive' });
+                    navigate('/purchase/vendors');
+                    return;
+                }
 
                 // Fetch vendor details
-                const vendorData = await purchaseApi.vendors.get(parseInt(id));
+                const vendorData = await purchaseApi.vendors.get(vendorId);
                 setVendor(vendorData);
 
                 // Fetch payments
-                const paymentsData = await purchaseApi.vendors.payments(parseInt(id));
+                const paymentsData = await purchaseApi.vendors.payments(vendorId);
                 setPayments(paymentsData);
                 setFilteredPayments(paymentsData);
 

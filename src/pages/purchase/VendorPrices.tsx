@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,10 @@ import {
     Clock,
     Package,
     Download,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
 } from "lucide-react";
 import { purchaseApi, shopProductsApi, type Vendor, type ShopProduct, API_ROOT, getTokens } from "@/lib/api";
 import { toast } from "sonner";
@@ -73,9 +77,16 @@ export default function VendorPrices() {
     const [searchTerm, setSearchTerm] = useState("");
     const [filterVendor, setFilterVendor] = useState<string>("all");
     const [filterActive, setFilterActive] = useState<string>("all");
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [hasNext, setHasNext] = useState(false);
+    const [hasPrevious, setHasPrevious] = useState(false);
+    const pageSize = 20; // Server-side page size
 
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [products, setProducts] = useState<ShopProduct[]>([]);
+    const [vendorsLoading, setVendorsLoading] = useState(false);
+    const [productsLoading, setProductsLoading] = useState(false);
     const [selectedProductForAdd, setSelectedProductForAdd] = useState<string>("");
 
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -95,31 +106,111 @@ export default function VendorPrices() {
         notes: "",
     });
 
+    // Load vendors and products lazily (only when needed)
     useEffect(() => {
-        fetchData();
+        if (vendors.length === 0 && !vendorsLoading) {
+            fetchVendors();
+        }
     }, []);
 
-    const fetchData = async () => {
+    useEffect(() => {
+        if (isAddDialogOpen && products.length === 0 && !productsLoading) {
+            fetchProducts();
+        }
+    }, [isAddDialogOpen]);
+
+    const fetchVendorPrices = useCallback(async () => {
         try {
             setLoading(true);
-            const [pricesResponse, vendorsResponse, productsResponse] = await Promise.all([
-                purchaseApi.vendorProductPrices.list(),
-                purchaseApi.vendors.list(),
-                shopProductsApi.list(),
-            ]);
+            
+            // Build query parameters for server-side filtering and pagination
+            const params: Record<string, any> = {
+                page: currentPage,
+                page_size: pageSize,
+            };
 
-            setVendorPrices(Array.isArray(pricesResponse) ? pricesResponse : []);
-            setVendors(Array.isArray(vendorsResponse) ? vendorsResponse : []);
-            setProducts(Array.isArray(productsResponse) ? productsResponse : []);
+            // Add filters (only if not "all")
+            if (filterVendor !== "all") {
+                params.vendor = filterVendor;
+            }
+            if (filterActive !== "all") {
+                params.is_active = filterActive === "active" ? "true" : "false";
+            }
+            // Add search term if provided
+            if (searchTerm) {
+                params.search = searchTerm;
+            }
+
+            const response = await purchaseApi.vendorProductPrices.list(params);
+            
+            // Handle paginated response structure
+            if (response && typeof response === 'object' && 'results' in response) {
+                // Paginated response: { count, next, previous, results }
+                setVendorPrices(Array.isArray(response.results) ? response.results : []);
+                setTotalCount(response.count || 0);
+                setHasNext(!!response.next);
+                setHasPrevious(!!response.previous);
+            } else {
+                // Fallback for non-paginated response (backward compatibility)
+                setVendorPrices(Array.isArray(response) ? response : []);
+                setTotalCount(Array.isArray(response) ? response.length : 0);
+                setHasNext(false);
+                setHasPrevious(false);
+            }
         } catch (error) {
-            console.error('Failed to fetch data:', error);
+            console.error('Failed to fetch vendor prices:', error);
             toast.error('Failed to load vendor prices');
+            setVendorPrices([]);
+            setTotalCount(0);
         } finally {
             setLoading(false);
         }
+    }, [currentPage, searchTerm, filterVendor, filterActive, pageSize]);
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        if (currentPage !== 1) {
+            setCurrentPage(1);
+        }
+    }, [searchTerm, filterVendor, filterActive]);
+
+    // Fetch vendor prices when filters or page change
+    useEffect(() => {
+        fetchVendorPrices();
+    }, [fetchVendorPrices]);
+
+    const fetchVendors = async () => {
+        try {
+            setVendorsLoading(true);
+            const vendorsResponse = await purchaseApi.vendors.list();
+            setVendors(Array.isArray(vendorsResponse) ? vendorsResponse : []);
+        } catch (error) {
+            console.error('Failed to fetch vendors:', error);
+        } finally {
+            setVendorsLoading(false);
+        }
     };
 
-    const openEditDialog = (price: VendorProductPrice) => {
+    const fetchProducts = async () => {
+        try {
+            setProductsLoading(true);
+            const productsResponse = await shopProductsApi.list();
+            setProducts(Array.isArray(productsResponse) ? productsResponse : []);
+        } catch (error) {
+            console.error('Failed to fetch products:', error);
+        } finally {
+            setProductsLoading(false);
+        }
+    };
+
+    const fetchData = async () => {
+        await fetchVendorPrices();
+        if (vendors.length === 0) {
+            await fetchVendors();
+        }
+    };
+
+    const openEditDialog = useCallback((price: VendorProductPrice) => {
         setSelectedPrice(price);
         setEditForm({
             purchase_price: price.purchase_price,
@@ -130,9 +221,9 @@ export default function VendorPrices() {
             notes: price.notes || "",
         });
         setIsEditDialogOpen(true);
-    };
+    }, []);
 
-    const openHistoryDialog = async (price: VendorProductPrice) => {
+    const openHistoryDialog = useCallback(async (price: VendorProductPrice) => {
         setSelectedPrice(price);
         try {
             const history = await purchaseApi.vendorProductPrices.getPriceHistory(price.id);
@@ -142,7 +233,7 @@ export default function VendorPrices() {
             console.error('Failed to fetch price history:', error);
             toast.error('Failed to load price history');
         }
-    };
+    }, []);
 
     const handleSave = async () => {
         if (!selectedPrice) return;
@@ -202,18 +293,8 @@ export default function VendorPrices() {
         }
     };
 
-    const filteredPrices = vendorPrices.filter(price => {
-        const matchesSearch = searchTerm === "" ||
-            price.product_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            price.vendor_name.toLowerCase().includes(searchTerm.toLowerCase());
-
-        const matchesVendor = filterVendor === "all" || price.vendor.toString() === filterVendor;
-        const matchesActive = filterActive === "all" ||
-            (filterActive === "active" && price.is_active) ||
-            (filterActive === "inactive" && !price.is_active);
-
-        return matchesSearch && matchesVendor && matchesActive;
-    });
+    // Prices are already filtered server-side, so use them directly
+    const filteredPrices = vendorPrices;
 
     const handleExportExcel = async () => {
         try {
@@ -354,14 +435,20 @@ export default function VendorPrices() {
         }
     };
 
-    // Group prices by product for comparison
-    const pricesByProduct = filteredPrices.reduce((acc, price) => {
-        if (!acc[price.product_id]) {
-            acc[price.product_id] = [];
-        }
-        acc[price.product_id].push(price);
-        return acc;
-    }, {} as Record<string, VendorProductPrice[]>);
+    // Group prices by product (server already returns filtered/paginated data)
+    const pricesByProduct = useMemo(() => {
+        return filteredPrices.reduce((acc, price) => {
+            if (!acc[price.product_id]) {
+                acc[price.product_id] = [];
+            }
+            acc[price.product_id].push(price);
+            return acc;
+        }, {} as Record<string, VendorProductPrice[]>);
+    }, [filteredPrices]);
+
+    // Calculate pagination from server response
+    const totalProducts = Object.keys(pricesByProduct).length;
+    const totalPages = Math.ceil(totalCount / pageSize);
 
     if (loading) {
         return (
@@ -439,18 +526,27 @@ export default function VendorPrices() {
             {/* Compact Grouped Vendor Prices */}
             <Card className="shadow-sm">
                 <CardHeader className="p-3 pb-2">
-                    <CardTitle className="text-sm font-semibold">
-                        {Object.keys(pricesByProduct).length} Products • {filteredPrices.length} Vendor Prices
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold">
+                            {totalCount > 0 ? `${totalCount} Total` : 'No'} Vendor Prices
+                            {totalPages > 1 && (
+                                <span className="text-xs font-normal text-gray-500 ml-2">
+                                    (Page {currentPage} of {totalPages})
+                                </span>
+                            )}
+                        </CardTitle>
+                    </div>
                 </CardHeader>
                 <CardContent className="p-3 pt-0">
                     {Object.keys(pricesByProduct).length === 0 ? (
                         <div className="text-center py-6 text-xs text-gray-500">
-                            No vendor prices found
+                            {loading ? 'Loading...' : 'No vendor prices found'}
                         </div>
                     ) : (
-                        <div className="space-y-2">
-                            {Object.entries(pricesByProduct).map(([productId, prices]) => {
+                        <>
+                            <div className="space-y-2">
+                                {Object.entries(pricesByProduct).map(([productId, prices]) => {
+                                // Sort prices once per product
                                 const sortedPrices = [...prices].sort((a, b) =>
                                     parseFloat(a.purchase_price) - parseFloat(b.purchase_price)
                                 );
@@ -552,7 +648,80 @@ export default function VendorPrices() {
                                     </div>
                                 );
                             })}
-                        </div>
+                            </div>
+                            
+                            {/* Pagination Controls */}
+                            {totalPages > 1 && (
+                                <div className="flex items-center justify-between mt-4 pt-3 border-t">
+                                    <div className="text-xs text-gray-500">
+                                        Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount} vendor prices
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(1)}
+                                            disabled={!hasPrevious || currentPage === 1}
+                                            className="h-7 px-2"
+                                        >
+                                            <ChevronsLeft className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                            disabled={!hasPrevious || currentPage === 1}
+                                            className="h-7 px-2"
+                                        >
+                                            <ChevronLeft className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <div className="flex items-center gap-1">
+                                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                                let page: number;
+                                                if (totalPages <= 5) {
+                                                    page = i + 1;
+                                                } else if (currentPage <= 3) {
+                                                    page = i + 1;
+                                                } else if (currentPage >= totalPages - 2) {
+                                                    page = totalPages - 4 + i;
+                                                } else {
+                                                    page = currentPage - 2 + i;
+                                                }
+                                                return (
+                                                    <Button
+                                                        key={page}
+                                                        variant={currentPage === page ? "default" : "outline"}
+                                                        size="sm"
+                                                        onClick={() => setCurrentPage(page)}
+                                                        className="h-7 w-7 p-0 text-xs"
+                                                    >
+                                                        {page}
+                                                    </Button>
+                                                );
+                                            })}
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                            disabled={!hasNext || currentPage === totalPages}
+                                            className="h-7 px-2"
+                                        >
+                                            <ChevronRight className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(totalPages)}
+                                            disabled={!hasNext || currentPage === totalPages}
+                                            className="h-7 px-2"
+                                        >
+                                            <ChevronsRight className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
                     )}
                 </CardContent>
             </Card>

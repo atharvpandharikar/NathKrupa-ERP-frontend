@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useOptimizedTransactions } from "@/hooks/useOptimizedData";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -81,17 +82,18 @@ export default function Transactions() {
     const location = useLocation();
     const { toast } = useToast();
     const { trackJob } = useExportNotifications();
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [searchTerm, setSearchTerm] = useState("");
     const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
-    const [searchTerm, setSearchTerm] = useState("");
     const [selectedAccount, setSelectedAccount] = useState<string>("all");
     const [selectedType, setSelectedType] = useState<string>("all");
     const [sortBy, setSortBy] = useState<string>("newest");
     const [dateFrom, setDateFrom] = useState<string>("");
     const [dateTo, setDateTo] = useState<string>("");
-    const [loading, setLoading] = useState(true);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    
+    const { transactions, loading, error: transactionsError } = useOptimizedTransactions(searchTerm);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -121,14 +123,17 @@ export default function Transactions() {
     const [currentExportJob, setCurrentExportJob] = useState<ExportJob | null>(null);
 
     useEffect(() => {
-        fetchTransactions();
         fetchAccounts();
         fetchVendors();
     }, []);
 
     useEffect(() => {
         filterTransactions();
-    }, [transactions, searchTerm, selectedAccount, selectedType, sortBy, dateFrom, dateTo]);
+        // Restore focus to input if it was focused before
+        if (searchInputRef.current && document.activeElement === document.body) {
+            setTimeout(() => searchInputRef.current?.focus(), 0);
+        }
+    }, [transactions, selectedAccount, selectedType, sortBy, dateFrom, dateTo]);
 
     // Handle /new route by opening the create dialog
     useEffect(() => {
@@ -137,22 +142,14 @@ export default function Transactions() {
         }
     }, [location.pathname]);
 
-    const fetchTransactions = async () => {
-        try {
-            setLoading(true);
-            const data = await financeApi.get<Transaction[]>('/transactions/');
-            setTransactions(data);
-        } catch (error) {
-            console.error('Error fetching transactions:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const fetchAccounts = async () => {
         try {
-            const data = await financeApi.get<Account[]>('/accounts/');
-            setAccounts(data);
+            // Handle pagination - accounts API returns paginated response
+            const response = await financeApi.get<any>('/accounts/?page_size=1000');
+            // Extract results from paginated response or use array directly
+            const accountsData = Array.isArray(response) ? response : (response.results || []);
+            setAccounts(accountsData);
         } catch (error) {
             console.error('Error fetching accounts:', error);
         }
@@ -160,9 +157,11 @@ export default function Transactions() {
 
     const fetchVendors = async () => {
         try {
-            // Use the actual purchase API to fetch vendors
-            const data = await purchaseApi.vendors.list();
-            setVendors(data);
+            // Use the actual purchase API to fetch vendors - handle pagination
+            const response = await purchaseApi.vendors.list();
+            // Extract results from paginated response or use array directly
+            const vendorsData = Array.isArray(response) ? response : (response.results || []);
+            setVendors(vendorsData);
         } catch (error) {
             console.error('Error fetching vendors:', error);
             // Fallback to empty array if API fails
@@ -171,18 +170,11 @@ export default function Transactions() {
     };
 
     const filterTransactions = () => {
-        let filtered = transactions;
+        // Ensure transactions is always an array (handle paginated responses)
+        const transactionsArray = Array.isArray(transactions) ? transactions : (transactions?.results || []);
+        let filtered = transactionsArray;
 
-        // Filter by search term
-        if (searchTerm) {
-            filtered = filtered.filter(transaction =>
-                transaction.purpose.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                transaction.from_party.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                transaction.to_party.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                transaction.bill_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                transaction.utr_number.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        }
+        // Search is now handled by backend Typesense - no client-side filtering needed
 
         // Filter by account
         if (selectedAccount !== "all") {
@@ -258,10 +250,10 @@ export default function Transactions() {
         if (window.confirm('Are you sure you want to delete this transaction?')) {
             try {
                 await financeApi.del(`/transactions/${transactionId}/`);
-                setTransactions(transactions.filter(transaction => transaction.id !== transactionId));
+                toast({ title: 'Success', description: 'Transaction deleted successfully' });
             } catch (error) {
                 console.error('Error deleting transaction:', error);
-                alert('Error deleting transaction');
+                toast({ title: 'Error', description: 'Failed to delete transaction', variant: 'destructive' });
             }
         }
     };
@@ -269,18 +261,31 @@ export default function Transactions() {
     const handleCreateTransaction = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Validate account
+        if (!formData.account || formData.account === "") {
+            toast({ title: 'Error', description: 'Please select an account', variant: 'destructive' });
+            return;
+        }
+
         // Validate amount
         if (formData.amount <= 0) {
-            alert('Transaction amount must be greater than zero.');
+            toast({ title: 'Error', description: 'Transaction amount must be greater than zero.', variant: 'destructive' });
             return;
         }
 
         setCreateLoading(true);
 
         try {
+            const accountId = parseInt(formData.account);
+            if (isNaN(accountId)) {
+                toast({ title: 'Error', description: 'Invalid account selected', variant: 'destructive' });
+                setCreateLoading(false);
+                return;
+            }
+
             const transactionData = {
                 ...formData,
-                account: parseInt(formData.account),
+                account: accountId,
                 amount: parseFloat(formData.amount.toString()),
                 time: new Date(formData.time).toISOString(),
                 // Handle vendor selection for debit transactions
@@ -298,8 +303,8 @@ export default function Transactions() {
             };
 
             const newTransaction = await financeApi.createTransactionWithImage(transactionData, selectedImage || undefined);
-            setTransactions([newTransaction, ...transactions]);
             setIsCreateDialogOpen(false);
+            toast({ title: 'Success', description: 'Transaction created successfully' });
             setFormData({
                 account: "",
                 transaction_type: "Credit",
@@ -738,13 +743,15 @@ export default function Transactions() {
                     <div className="space-y-4">
                         {/* First row - Search and basic filters */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="relative">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
+                            <div className="flex flex-col">
+                                <label className="text-xs text-muted-foreground mb-1">Search</label>
+                                <input
+                                    ref={searchInputRef}
+                                    className="h-9 rounded-md border bg-background px-3 text-sm"
                                     placeholder="Search transactions..."
+                                    aria-label="Search transactions"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-8"
                                 />
                             </div>
 

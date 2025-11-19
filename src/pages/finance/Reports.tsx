@@ -95,15 +95,19 @@ const Reports = () => {
 
             // Fetch all data in parallel
             const [accountsResponse, transactionsResponse, summaryResponse, overallBalanceResponse] = await Promise.all([
-                financeApi.get<Account[]>('/accounts/'),
-                financeApi.get<Transaction[]>(`/transactions/?from_date=${fromDate}&to_date=${toDate}`),
+                financeApi.get<any>('/accounts/?page_size=1000'),
+                financeApi.get<any>(`/transactions/?from_date=${fromDate}&to_date=${toDate}&page_size=1000`),
                 financeApi.get<TransactionSummary>(`/transactions/summary/?from_date=${fromDate}&to_date=${toDate}`),
                 financeApi.get<OverallBalance>('/reports/overall-balance/')
             ]);
 
+            // Extract results from paginated responses or use arrays directly
+            const accountsData = Array.isArray(accountsResponse) ? accountsResponse : (accountsResponse.results || []);
+            const transactionsData = Array.isArray(transactionsResponse) ? transactionsResponse : (transactionsResponse.results || []);
+
             setFinancialData({
-                accounts: accountsResponse,
-                transactions: transactionsResponse,
+                accounts: accountsData,
+                transactions: transactionsData,
                 summary: summaryResponse,
                 overallBalance: overallBalanceResponse,
                 loading: false,
@@ -532,7 +536,7 @@ const Reports = () => {
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
-                                {financialData.transactions.slice(0, 10).map((transaction) => (
+                                {(Array.isArray(financialData.transactions) ? financialData.transactions : []).slice(0, 10).map((transaction) => (
                                     <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                                         <div className="flex-1">
                                             <div className="font-medium">{transaction.purpose}</div>

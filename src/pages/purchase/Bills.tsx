@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useOptimizedPurchaseBills } from "@/hooks/useOptimizedData";
 import {
     Table,
     TableBody,
@@ -23,9 +24,10 @@ import { purchaseApi, type PurchaseBill } from "@/lib/api";
 
 export default function Bills() {
     const navigate = useNavigate();
-    const [bills, setBills] = useState<PurchaseBill[]>([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const { bills: billsData, loading, error: billsError } = useOptimizedPurchaseBills(searchTerm);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const wasInputFocusedRef = useRef(false);
     const [dashboardStats, setDashboardStats] = useState({
         total_bills: 0,
         total_amount: 0,
@@ -39,32 +41,40 @@ export default function Bills() {
     }>>({});
 
     useEffect(() => {
-        const fetchData = async () => {
+        const fetchStats = async () => {
             try {
-                setLoading(true);
-
-                // Fetch bills and dashboard stats in parallel
-                const [billsResponse, statsResponse] = await Promise.all([
-                    purchaseApi.bills.list(),
-                    purchaseApi.dashboardStats()
-                ]);
-
-                // Set bills data
-                setBills(Array.isArray(billsResponse) ? billsResponse : []);
-
-                // Set dashboard stats
+                // Fetch dashboard stats only
+                const statsResponse = await purchaseApi.dashboardStats();
                 setDashboardStats({
                     total_bills: statsResponse.total_bills || 0,
                     total_amount: statsResponse.total_amount || 0,
                     paid_amount: statsResponse.paid_amount || 0,
                     outstanding_amount: statsResponse.outstanding_amount || 0
                 });
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+            }
+        };
+        fetchStats();
+    }, []);
 
-                // Fetch vendor-level stats
-                const vendorStatsMap: Record<number, any> = {};
-                const uniqueVendors = new Set(bills.map(bill => bill.vendor.id));
-
-                for (const vendorId of uniqueVendors) {
+    // Fetch vendor stats separately to avoid blocking input (debounced)
+    useEffect(() => {
+        if (billsData.length === 0) {
+            setVendorStats({});
+            return;
+        }
+        
+        const fetchVendorStats = async () => {
+            const uniqueVendorIds = [...new Set(billsData.map(bill => bill.vendor?.id || bill.vendor))];
+            const vendorStatsMap: Record<number, {
+                vendor_name: string;
+                total_outstanding: number;
+                unallocated_payments: number;
+            }> = {};
+            
+            for (const vendorId of uniqueVendorIds) {
+                if (vendorId) {
                     try {
                         const vendorResponse = await purchaseApi.vendors.paymentSummary(vendorId);
                         vendorStatsMap[vendorId] = {
@@ -76,28 +86,26 @@ export default function Bills() {
                         console.error(`Failed to fetch stats for vendor ${vendorId}:`, error);
                     }
                 }
-                setVendorStats(vendorStatsMap);
-            } catch (error) {
-                console.error('Failed to fetch data:', error);
-                setBills([]);
-                setDashboardStats({
-                    total_bills: 0,
-                    total_amount: 0,
-                    paid_amount: 0,
-                    outstanding_amount: 0
-                });
-            } finally {
-                setLoading(false);
             }
+            setVendorStats(vendorStatsMap);
         };
+        
+        // Use a delay to avoid blocking the input during rapid typing
+        const timer = setTimeout(fetchVendorStats, 300);
+        return () => clearTimeout(timer);
+    }, [billsData, searchTerm]);
 
-        fetchData();
-    }, []);
+    // Restore focus synchronously after vendorStats state updates
+    useLayoutEffect(() => {
+        if (wasInputFocusedRef.current && searchInputRef.current) {
+            searchInputRef.current.focus();
+            const len = searchTerm.length;
+            searchInputRef.current.setSelectionRange(len, len);
+        }
+    }, [vendorStats, searchTerm]);
 
-    const filteredBills = bills.filter(bill =>
-        bill.bill_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        bill.vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // No client-side filtering needed - backend Typesense handles search
+    const filteredBills = billsData;
 
 
     const formatCurrency = (amount: number) => {
@@ -193,13 +201,20 @@ export default function Bills() {
                 <CardContent className="pt-6">
                     <div className="flex gap-4">
                         <div className="flex-1">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input
+                            <div className="flex flex-col">
+                                <label className="text-xs text-muted-foreground mb-1">Search</label>
+                                <input
+                                    ref={searchInputRef}
+                                    className="h-9 rounded-md border bg-background px-3 text-sm"
                                     placeholder="Search bills by number or vendor..."
+                                    aria-label="Search bills"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10"
+                                    onFocus={() => { wasInputFocusedRef.current = true; }}
+                                    onBlur={() => { wasInputFocusedRef.current = false; }}
+                                    onChange={(e) => {
+                                        wasInputFocusedRef.current = true;
+                                        setSearchTerm(e.target.value);
+                                    }}
                                 />
                             </div>
                         </div>

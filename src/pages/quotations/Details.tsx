@@ -197,10 +197,14 @@ export default function QuotationDetails() {
         .finally(() => setLoadLoading(false));
     }
 
-    // Load accounts for finance integration
+    // Load accounts for finance integration - handle pagination
     if (openConvert && accounts.length === 0) {
-      financeApi.get<Array<{ id: number; nickname: string; account_name: string; account_type: string }>>('/accounts/')
-        .then(setAccounts)
+      financeApi.get<any>('/accounts/?page_size=1000')
+        .then((response) => {
+          // Extract results from paginated response or use array directly
+          const accountsData = Array.isArray(response) ? response : (response.results || []);
+          setAccounts(accountsData);
+        })
         .catch((e) => {
           console.error('Failed to load accounts:', e);
           toast({
@@ -301,10 +305,15 @@ export default function QuotationDetails() {
     try {
       if (!id) return;
       const final_total = discountTotals?.discounted_total ?? baseTotal();
-      await api.post(`/quotations/${id}/approve/`, { final_total });
+      const response = await api.post<{ message: string; quotation?: QuotationDetail }>(`/quotations/${id}/approve/`, { final_total });
       toast({ title: 'Approved', description: `Final total ₹${final_total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` });
-      const fresh = await api.get<QuotationDetail>(`/quotations/${id}/`);
-      setQuote(fresh);
+      // Use returned quotation data if available, otherwise refetch
+      if (response.quotation) {
+        setQuote(response.quotation);
+      } else {
+        const fresh = await api.get<QuotationDetail>(`/quotations/${id}/`);
+        setQuote(fresh);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       toast({ title: 'Failed to approve', description: msg, variant: 'destructive' });
@@ -481,13 +490,15 @@ export default function QuotationDetails() {
           {quote.status === 'review' && (
             <Button size="sm" variant="outline" className="ml-2" onClick={() => {
               // Approve quotation logic - no final total required
-              api.post(`/quotations/${quote.id}/approve/`, {
+              api.post<{ message: string; quotation?: QuotationDetail }>(`/quotations/${quote.id}/approve/`, {
                 final_total: quote.suggested_total // Use suggested total as final total
               })
-                .then(() => {
+                .then((response) => {
                   toast({ title: 'Success', description: 'Quotation approved' });
-                  // Refresh the quotation data
-                  if (id) {
+                  // Use returned quotation data if available, otherwise refetch
+                  if (response.quotation) {
+                    setQuote(response.quotation);
+                  } else if (id) {
                     api.get<QuotationDetail>(`/quotations/${id}/`)
                       .then(setQuote)
                       .catch(console.error);

@@ -21,10 +21,14 @@ export default function Preferences() {
   useEffect(() => { document.title = "Settings | Nathkrupa"; }, []);
 
   // Fetch test mode status
+  // COST OPTIMIZATION: Removed aggressive polling (was 5 seconds)
+  // Test mode status changes infrequently, so polling is unnecessary
+  // User can manually refresh using the refresh button
   const { data: testModeStatus, isLoading, error } = useQuery({
     queryKey: ["test-mode-status"],
     queryFn: () => testModeApi.getTestModeStatus(),
-    refetchInterval: 5000, // Refresh every 5 seconds
+    refetchInterval: false, // No automatic polling - reduces API calls by ~17,000/day
+    staleTime: 60000, // Consider data fresh for 1 minute
   });
 
   // Enable test mode mutation

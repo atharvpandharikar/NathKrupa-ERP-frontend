@@ -64,20 +64,28 @@ export default function VendorDetail() {
     useEffect(() => {
         const fetchVendorData = async () => {
             if (!id) return;
+            
+            // Validate id is a valid number
+            const vendorId = parseInt(id);
+            if (isNaN(vendorId)) {
+                toast({ title: 'Invalid vendor ID', variant: 'destructive' });
+                navigate('/purchase/vendors');
+                return;
+            }
 
             try {
                 setLoading(true);
 
                 // Fetch vendor details
-                const vendorData = await purchaseApi.vendors.get(parseInt(id));
+                const vendorData = await purchaseApi.vendors.get(vendorId);
                 setVendor(vendorData);
 
                 // Fetch payment summary from backend
-                const paymentSummaryData = await purchaseApi.vendors.paymentSummary(parseInt(id));
+                const paymentSummaryData = await purchaseApi.vendors.paymentSummary(vendorId);
                 setPaymentSummary(paymentSummaryData);
 
                 // Fetch vendor bills for stats
-                const billsData = await purchaseApi.vendors.bills(parseInt(id));
+                const billsData = await purchaseApi.vendors.bills(vendorId);
 
                 // Calculate stats
                 const totalBills = billsData.length;
@@ -97,8 +105,8 @@ export default function VendorDetail() {
                 });
 
                 // Fetch payments and outstanding bills
-                const paymentsData = await purchaseApi.vendors.payments(parseInt(id));
-                const outstandingBillsData = await purchaseApi.vendors.outstandingBills(parseInt(id));
+                const paymentsData = await purchaseApi.vendors.payments(vendorId);
+                const outstandingBillsData = await purchaseApi.vendors.outstandingBills(vendorId);
 
                 setPayments(paymentsData);
                 setOutstandingBills(outstandingBillsData);
@@ -148,11 +156,15 @@ export default function VendorDetail() {
     const handleTransactionSuccess = async () => {
         // Refresh vendor data after successful transaction
         if (!id) return;
+        
+        // Validate id is a valid number
+        const vendorId = parseInt(id);
+        if (isNaN(vendorId)) return;
 
         try {
-            const paymentSummaryData = await purchaseApi.vendors.paymentSummary(parseInt(id));
-            const paymentsData = await purchaseApi.vendors.payments(parseInt(id));
-            const outstandingBillsData = await purchaseApi.vendors.outstandingBills(parseInt(id));
+            const paymentSummaryData = await purchaseApi.vendors.paymentSummary(vendorId);
+            const paymentsData = await purchaseApi.vendors.payments(vendorId);
+            const outstandingBillsData = await purchaseApi.vendors.outstandingBills(vendorId);
 
             setPaymentSummary(paymentSummaryData);
             setPayments(paymentsData);

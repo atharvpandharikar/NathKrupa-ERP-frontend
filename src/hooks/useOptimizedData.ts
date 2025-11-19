@@ -162,13 +162,21 @@ export function useOptimizedQuotations(page = 1, pageSize = 20, searchTerm = '')
         const fetchQuotations = async () => {
             setLoading(true);
             try {
-                const searchParam = searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : '';
-                const response = await api.get<any>(
-                    `/quotations/?page=${page}&page_size=${pageSize}${searchParam}&fields=id,quotation_number,customer,vehicle_maker,vehicle_model,status,final_total,created_at`
-                );
+                // Use Typesense search if searchTerm is provided, otherwise use paginated list
+                if (searchTerm && searchTerm.trim()) {
+                    const { quotationApi } = await import('@/lib/api');
+                    const searchResponse = await quotationApi.search(searchTerm);
+                    setQuotations(searchResponse.results || []);
+                    setTotalCount(searchResponse.count || 0);
+                } else {
+                    const searchParam = '';
+                    const response = await api.get<any>(
+                        `/quotations/?page=${page}&page_size=${pageSize}${searchParam}&fields=id,quotation_number,customer,vehicle_maker,vehicle_model,status,final_total,created_at`
+                    );
 
-                setQuotations(response.results || response);
-                setTotalCount(response.count || response.length);
+                    setQuotations(response.results || response);
+                    setTotalCount(response.count || response.length);
+                }
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -180,6 +188,112 @@ export function useOptimizedQuotations(page = 1, pageSize = 20, searchTerm = '')
     }, [page, pageSize, searchTerm]);
 
     return { quotations, totalCount, loading, error };
+}
+
+/**
+ * Optimized hook for fetching transactions with search
+ */
+export function useOptimizedTransactions(searchTerm = '') {
+    const [transactions, setTransactions] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchTransactions = async () => {
+            setLoading(true);
+            try {
+                // Use Typesense search if searchTerm is provided, otherwise fetch all
+                if (searchTerm && searchTerm.trim()) {
+                    const { financeApi } = await import('@/lib/api');
+                    const searchResponse = await financeApi.searchTransactions(searchTerm);
+                    setTransactions(searchResponse.results || []);
+                } else {
+                    const { financeApi } = await import('@/lib/api');
+                    const response = await financeApi.get<any>('/transactions/?page_size=1000');
+                    const transactionsData = Array.isArray(response) ? response : (response.results || []);
+                    setTransactions(transactionsData);
+                }
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchTransactions();
+    }, [searchTerm]);
+
+    return { transactions, loading, error };
+}
+
+/**
+ * Optimized hook for fetching vendors with search
+ */
+export function useOptimizedVendors(searchTerm = '') {
+    const [vendors, setVendors] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchVendors = async () => {
+            setLoading(true);
+            try {
+                const { purchaseApi } = await import('@/lib/api');
+                // Use Typesense search if searchTerm is provided, otherwise fetch all
+                if (searchTerm && searchTerm.trim()) {
+                    const searchResponse = await purchaseApi.vendors.search(searchTerm);
+                    setVendors(searchResponse.results || []);
+                } else {
+                    const response = await purchaseApi.vendors.list();
+                    const vendorsData = Array.isArray(response) ? response : (response.results || []);
+                    setVendors(vendorsData);
+                }
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchVendors();
+    }, [searchTerm]);
+
+    return { vendors, loading, error };
+}
+
+/**
+ * Optimized hook for fetching purchase bills with search
+ */
+export function useOptimizedPurchaseBills(searchTerm = '') {
+    const [bills, setBills] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchBills = async () => {
+            setLoading(true);
+            try {
+                const { purchaseApi } = await import('@/lib/api');
+                // Use Typesense search if searchTerm is provided, otherwise fetch all
+                if (searchTerm && searchTerm.trim()) {
+                    const searchResponse = await purchaseApi.bills.search(searchTerm);
+                    setBills(searchResponse.results || []);
+                } else {
+                    const response = await purchaseApi.bills.list();
+                    const billsData = Array.isArray(response) ? response : (response.results || []);
+                    setBills(billsData);
+                }
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchBills();
+    }, [searchTerm]);
+
+    return { bills, loading, error };
 }
 
 /**
@@ -195,13 +309,21 @@ export function useOptimizedWorkOrders(page = 1, pageSize = 20, searchTerm = '')
         const fetchWorkOrders = async () => {
             setLoading(true);
             try {
-                const searchParam = searchTerm ? `&search=${encodeURIComponent(searchTerm)}` : '';
-                const response = await api.get<any>(
-                    `/work-orders/?page=${page}&page_size=${pageSize}${searchParam}`
-                );
+                // Use Typesense search if searchTerm is provided, otherwise use paginated list
+                if (searchTerm && searchTerm.trim()) {
+                    const { workOrdersApi } = await import('@/lib/api');
+                    const searchResponse = await workOrdersApi.search(searchTerm);
+                    setWorkOrders(searchResponse.results || []);
+                    setTotalCount(searchResponse.count || 0);
+                } else {
+                    const searchParam = '';
+                    const response = await api.get<any>(
+                        `/work-orders/?page=${page}&page_size=${pageSize}${searchParam}`
+                    );
 
-                setWorkOrders(response.results || response);
-                setTotalCount(response.count || response.length);
+                    setWorkOrders(response.results || response);
+                    setTotalCount(response.count || response.length);
+                }
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -266,14 +388,21 @@ export function useOptimizedAllFeatureData() {
                     return;
                 }
 
-                // Fetch from API
-                const [prices, models, categories, types, images] = await Promise.all([
-                    api.get<FeaturePrice[]>('/feature-prices/'),
-                    api.get<VehicleModel[]>('/vehicle-models/'),
-                    api.get<FeatureCategory[]>('/feature-categories/'),
-                    api.get<FeatureType[]>('/feature-types/'),
-                    api.get<FeatureImage[]>('/feature-images/'),
+                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
+                const [pricesRes, modelsRes, categoriesRes, typesRes, imagesRes] = await Promise.all([
+                    api.get<any>('/feature-prices/?page_size=1000'),
+                    api.get<any>('/vehicle-models/?page_size=1000'),
+                    api.get<any>('/feature-categories/?page_size=1000'),
+                    api.get<any>('/feature-types/?page_size=1000'),
+                    api.get<any>('/feature-images/?page_size=1000'),
                 ]);
+                
+                // Extract results from paginated response or use array directly
+                const prices = Array.isArray(pricesRes) ? pricesRes : (pricesRes.results || []);
+                const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
+                const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
+                const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
+                const images = Array.isArray(imagesRes) ? imagesRes : (imagesRes.results || []);
 
                 // Set cache
                 setCachedData(cacheKeys.prices, prices);
@@ -332,11 +461,15 @@ export function useOptimizedFeatureCategoriesPageData() {
                     return;
                 }
 
-                // Fetch from API
-                const [categories, vehicleTypes] = await Promise.all([
-                    api.get<FeatureCategory[]>('/feature-categories/'),
-                    api.get<any[]>('/vehicle-types/'),
+                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
+                const [categoriesRes, vehicleTypesRes] = await Promise.all([
+                    api.get<any>('/feature-categories/?page_size=1000'),
+                    api.get<any>('/vehicle-types/?page_size=1000'),
                 ]);
+                
+                // Extract results from paginated response or use array directly
+                const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
+                const vehicleTypes = Array.isArray(vehicleTypesRes) ? vehicleTypesRes : (vehicleTypesRes.results || []);
 
                 // Set cache
                 setCachedData(cacheKeys.categories, categories);
@@ -398,12 +531,17 @@ export function useOptimizedFeatureTypesPageData() {
                     return;
                 }
 
-                // Fetch from API
-                const [types, categories, models] = await Promise.all([
-                    api.get<FeatureType[]>('/feature-types/'),
-                    api.get<FeatureCategory[]>('/feature-categories/'),
-                    api.get<VehicleModel[]>('/vehicle-models/'),
+                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
+                const [typesRes, categoriesRes, modelsRes] = await Promise.all([
+                    api.get<any>('/feature-types/?page_size=1000'),
+                    api.get<any>('/feature-categories/?page_size=1000'),
+                    api.get<any>('/vehicle-models/?page_size=1000'),
                 ]);
+                
+                // Extract results from paginated response or use array directly
+                const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
+                const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
+                const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
 
                 // Set cache
                 setCachedData(cacheKeys.types, types);
@@ -447,10 +585,12 @@ export function useOptimizedVehicleTypes() {
                     return;
                 }
 
-                // Fetch from API
-                const response = await api.get<any[]>('/vehicle-types/');
-                setCachedData(cacheKey, response);
-                setVehicleTypes(response);
+                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
+                const response = await api.get<any>('/vehicle-types/?page_size=1000');
+                // Extract results from paginated response or use array directly
+                const vehicleTypesData = Array.isArray(response) ? response : (response.results || []);
+                setCachedData(cacheKey, vehicleTypesData);
+                setVehicleTypes(vehicleTypesData);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -486,10 +626,12 @@ export function useOptimizedVehicleMakers() {
                     return;
                 }
 
-                // Fetch from API
-                const response = await api.get<any[]>('/vehicle-makers/');
-                setCachedData(cacheKey, response);
-                setVehicleMakers(response);
+                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
+                const response = await api.get<any>('/vehicle-makers/?page_size=1000');
+                // Extract results from paginated response or use array directly
+                const vehicleMakersData = Array.isArray(response) ? response : (response.results || []);
+                setCachedData(cacheKey, vehicleMakersData);
+                setVehicleMakers(vehicleMakersData);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -544,12 +686,17 @@ export function useOptimizedVehicleModelsPageData() {
                     return;
                 }
 
-                // Fetch from API
-                const [models, makers, types] = await Promise.all([
-                    api.get<VehicleModel[]>('/vehicle-models/'),
-                    api.get<any[]>('/vehicle-makers/'),
-                    api.get<any[]>('/vehicle-types/'),
+                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
+                const [modelsRes, makersRes, typesRes] = await Promise.all([
+                    api.get<any>('/vehicle-models/?page_size=1000'),
+                    api.get<any>('/vehicle-makers/?page_size=1000'),
+                    api.get<any>('/vehicle-types/?page_size=1000'),
                 ]);
+                
+                // Extract results from paginated response or use array directly
+                const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
+                const makers = Array.isArray(makersRes) ? makersRes : (makersRes.results || []);
+                const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
 
                 // Set cache
                 setCachedData(cacheKeys.models, models);

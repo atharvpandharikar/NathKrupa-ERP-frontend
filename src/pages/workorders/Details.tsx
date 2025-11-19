@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { workOrdersApi, addedFeaturesApi, featureApi, getTokens, vehicleIntakeApi, vehicleIntakeImagesApi, API_ROOT, financeApi, type AddedFeature, type FeatureCategory, type FeatureType, type FeaturePrice, type VehicleIntake, type VehicleIntakeImage } from "@/lib/api";
+import { workOrdersApi, addedFeaturesApi, featureApi, getTokens, vehicleIntakeApi, vehicleIntakeImagesApi, API_ROOT, financeApi, billsApi, type AddedFeature, type FeatureCategory, type FeatureType, type FeaturePrice, type VehicleIntake, type VehicleIntakeImage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { WorkOrderDatePicker } from "@/components/ui/work-order-date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Printer, Play, CreditCard, Eye, Plus, Truck, Loader2, Upload, Images, FileText, X } from "lucide-react";
+import { ArrowLeft, Printer, Play, CreditCard, Eye, Plus, Truck, Loader2, Upload, Images, FileText, X, MessageCircle } from "lucide-react";
 import { runWithConcurrencyDetailed, maybeCompressImage } from "@/lib/utils";
 
 // NOTE: backend status is 'workdone' (no underscore) – align constants
@@ -47,10 +47,14 @@ export default function WorkOrderDetails() {
   });
   // payments query removed - all payments now handled through finance app
 
-  // Fetch finance transactions linked to this work order by work order number
+  // Fetch finance transactions linked to this work order by work order number - handle pagination
   const { data: allFinanceTransactions = [] } = useQuery({
     queryKey: ["finance-transactions", workOrder?.work_order_number],
-    queryFn: () => financeApi.get<any[]>(`/transactions/?bill_no=${workOrder?.work_order_number}`),
+    queryFn: async () => {
+      const response = await financeApi.get<any>(`/transactions/?bill_no=${workOrder?.work_order_number}&page_size=1000`);
+      // Extract results from paginated response or use array directly
+      return Array.isArray(response) ? response : (response.results || []);
+    },
     enabled: !!workOrder?.work_order_number && !isLoading,
   });
 
@@ -74,7 +78,15 @@ export default function WorkOrderDetails() {
   // filteredPayments logic removed - all payments now handled through finance app
   const { data: intake } = useQuery<VehicleIntake | undefined>({
     queryKey: ["vehicle-intake", numericId],
-    queryFn: async () => workOrder?.id ? await vehicleIntakeApi.getByWorkOrder(workOrder.id) : undefined,
+    queryFn: async () => {
+      if (!workOrder?.id) return undefined;
+      try {
+        return await vehicleIntakeApi.getByWorkOrder(workOrder.id);
+      } catch (error) {
+        // Return undefined if not found instead of throwing
+        return undefined;
+      }
+    },
     enabled: !!numericId,
   });
 
@@ -288,6 +300,24 @@ export default function WorkOrderDetails() {
     }
   });
 
+  // Send WhatsApp mutation
+  const sendWhatsappMutation = useMutation({
+    mutationFn: () => billsApi.sendWhatsapp(workOrder!.id),
+    onSuccess: (data) => {
+      toast({
+        title: "WhatsApp sent successfully",
+        description: data.message || "Bill PDF sent via WhatsApp"
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to send WhatsApp",
+        description: error?.response?.data?.error || "Failed to send bill via WhatsApp",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -434,6 +464,24 @@ export default function WorkOrderDetails() {
           >
             <Printer className="h-4 w-4" />Outstanding Bill
           </Button>
+          {/* Send WhatsApp Button - only show if bill exists and customer has WhatsApp */}
+          {workOrder.has_bill && workOrder.bill_number && (
+            ((workOrder.quotation as any)?.customer?.whatsapp_number || 
+             (workOrder.work_order as any)?.quotation?.customer?.whatsapp_number ||
+             (workOrder.quotation as any)?.customer?.phone_number ||
+             (workOrder.work_order as any)?.quotation?.customer?.phone_number) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2 text-green-600 border-green-600 hover:bg-green-50"
+              onClick={() => sendWhatsappMutation.mutate()}
+              disabled={sendWhatsappMutation.isPending}
+            >
+              <MessageCircle className="h-4 w-4" />
+              {sendWhatsappMutation.isPending ? 'Sending...' : 'Send via WhatsApp'}
+            </Button>
+            )
+          )}
           {canProgress && (
             <StartJobWithIntakeButton disabled={statusMutation.isPending} intakeRequired={intakeRequired} onStart={() => statusMutation.mutate({ action: nextProgress!.action })} billId={workOrder.id} />
           )}

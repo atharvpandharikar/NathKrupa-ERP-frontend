@@ -108,8 +108,11 @@ export default function BillDetail() {
 
         const fetchAccounts = async () => {
             try {
-                const data = await financeApi.get<Account[]>('/accounts/');
-                setAccounts(data);
+                // Handle pagination - accounts API returns paginated response
+                const response = await financeApi.get<any>('/accounts/?page_size=1000');
+                // Extract results from paginated response or use array directly
+                const accountsData = Array.isArray(response) ? response : (response.results || []);
+                setAccounts(accountsData);
             } catch (error) {
                 console.error('Error fetching accounts:', error);
             }
@@ -117,8 +120,11 @@ export default function BillDetail() {
 
         const fetchVendors = async () => {
             try {
-                const data = await purchaseApi.vendors.list();
-                setVendors(data);
+                // Handle pagination - vendors API returns paginated response
+                const response = await purchaseApi.vendors.list();
+                // Extract results from paginated response or use array directly
+                const vendorsData = Array.isArray(response) ? response : (response.results || []);
+                setVendors(vendorsData);
             } catch (error) {
                 console.error('Error fetching vendors:', error);
                 setVendors([]);
@@ -496,7 +502,7 @@ export default function BillDetail() {
                                                         <SelectValue placeholder="Select account" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {accounts.map((account) => (
+                                                        {(Array.isArray(accounts) ? accounts : []).map((account) => (
                                                             <SelectItem key={account.id} value={account.id.toString()}>
                                                                 {account.nickname} ({account.account_type})
                                                             </SelectItem>

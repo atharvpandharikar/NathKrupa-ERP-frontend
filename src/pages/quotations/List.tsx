@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, FileText, Users, TrendingUp, DollarSign, Printer } from "lucide-react";
-import { api, API_ROOT } from "@/lib/api";
+import { ExternalLink, FileText, Users, TrendingUp, DollarSign, Printer, MessageCircle } from "lucide-react";
+import { api, API_ROOT, quotationApi } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useOptimizedQuotations } from "@/hooks/useOptimizedData";
@@ -109,6 +109,28 @@ export default function QuotationsList() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       toast({ title: 'Failed to update status', description: msg, variant: 'destructive' });
+    }
+  }
+
+  const [sendingWhatsapp, setSendingWhatsapp] = useState<number | null>(null);
+
+  async function handleSendWhatsapp(id: number) {
+    setSendingWhatsapp(id);
+    try {
+      const result = await quotationApi.sendWhatsapp(id);
+      toast({ 
+        title: 'WhatsApp sent successfully', 
+        description: result.message || 'Quotation PDF sent via WhatsApp' 
+      });
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Unknown error';
+      toast({ 
+        title: 'Failed to send WhatsApp', 
+        description: msg, 
+        variant: 'destructive' 
+      });
+    } finally {
+      setSendingWhatsapp(null);
     }
   }
 
@@ -335,6 +357,19 @@ export default function QuotationsList() {
                           >
                             <Printer className="w-3 h-3" /> Print
                           </Button>
+                          {quote.customer && (quote.customer.phone_number || (quote.customer as any).whatsapp_number) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSendWhatsapp(quote.id)}
+                              disabled={sendingWhatsapp === quote.id}
+                              title="Send via WhatsApp"
+                              className="gap-1 text-green-600 border-green-600 hover:bg-green-50"
+                            >
+                              <MessageCircle className="w-3 h-3" />
+                              {sendingWhatsapp === quote.id ? 'Sending...' : 'WhatsApp'}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

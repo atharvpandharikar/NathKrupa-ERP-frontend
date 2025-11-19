@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useOptimizedVendors } from "@/hooks/useOptimizedData";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -82,12 +83,14 @@ type SortDirection = 'asc' | 'desc';
 export default function Vendors() {
     const navigate = useNavigate();
     const { toast } = useToast();
-    const [vendors, setVendors] = useState<VendorWithStats[]>([]);
-    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const { vendors: vendorsData, loading, error: vendorsError } = useOptimizedVendors(searchTerm);
+    const [vendors, setVendors] = useState<VendorWithStats[]>([]);
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [priorityFilter, setPriorityFilter] = useState<string>('all');
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const wasInputFocusedRef = useRef(false);
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [newVendor, setNewVendor] = useState<NewVendor>({
         name: '',
@@ -126,12 +129,14 @@ export default function Vendors() {
     useEffect(() => {
         const fetchVendors = async () => {
             try {
-                setLoading(true);
                 const response = await purchaseApi.vendors.list();
+                
+                // Handle pagination - extract results from paginated response or use array directly
+                const vendorsArray = Array.isArray(response) ? response : (response.results || []);
 
                 // Fetch payment summary for each vendor
                 const vendorsWithStats = await Promise.all(
-                    response.map(async (vendor) => {
+                    vendorsArray.map(async (vendor) => {
                         try {
                             const summary = await purchaseApi.vendors.paymentSummary(vendor.id);
                             return {
@@ -163,15 +168,16 @@ export default function Vendors() {
                     description: "Failed to fetch vendors. Please try again.",
                     variant: "destructive",
                 });
-            } finally {
-                setLoading(false);
             }
         };
 
         const fetchAccounts = async () => {
             try {
-                const data = await financeApi.get<any[]>('/accounts/');
-                setAccounts(data);
+                // Handle pagination - accounts API returns paginated response
+                const response = await financeApi.get<any>('/accounts/?page_size=1000');
+                // Extract results from paginated response or use array directly
+                const accountsData = Array.isArray(response) ? response : (response.results || []);
+                setAccounts(accountsData);
             } catch (error) {
                 console.error('Error fetching accounts:', error);
             }
@@ -179,28 +185,79 @@ export default function Vendors() {
 
         const fetchVendorsList = async () => {
             try {
-                const data = await purchaseApi.vendors.list();
-                setVendorsList(data);
+                const response = await purchaseApi.vendors.list();
+                // Handle pagination - extract results from paginated response or use array directly
+                const vendorsData = Array.isArray(response) ? response : (response.results || []);
+                setVendorsList(vendorsData);
             } catch (error) {
                 console.error('Error fetching vendors:', error);
                 setVendorsList([]);
             }
         };
 
-        fetchVendors();
         fetchAccounts();
         fetchVendorsList();
     }, [toast]);
 
+    // Add stats to vendors when data changes - debounced to prevent focus loss
+    useEffect(() => {
+        let isMounted = true;
+        const addStatsToVendors = async () => {
+            if (vendorsData.length === 0) {
+                if (isMounted) {
+                    setVendors([]);
+                }
+                return;
+            }
+            
+            try {
+                const vendorsWithStats = await Promise.all(
+                    vendorsData.map(async (vendor) => {
+                        try {
+                            const vendorResponse = await purchaseApi.vendors.paymentSummary(vendor.id);
+                            return {
+                                ...vendor,
+                                total_outstanding: vendorResponse.total_outstanding || 0,
+                                unallocated_payments: vendorResponse.unallocated_payments || 0,
+                            };
+                        } catch {
+                            return {
+                                ...vendor,
+                                total_outstanding: 0,
+                                unallocated_payments: 0,
+                            };
+                        }
+                    })
+                );
+                if (isMounted) {
+                    setVendors(vendorsWithStats);
+                }
+            } catch (error) {
+                console.error('Error adding stats to vendors:', error);
+                if (isMounted) {
+                    setVendors(vendorsData.map(v => ({ ...v, total_outstanding: 0, unallocated_payments: 0 })));
+                }
+            }
+        };
+        addStatsToVendors();
+        return () => { isMounted = false; };
+    }, [vendorsData, searchTerm]);
+
+    // Restore focus synchronously after vendors state updates
+    useLayoutEffect(() => {
+        if (wasInputFocusedRef.current && searchInputRef.current) {
+            searchInputRef.current.focus();
+            const len = searchTerm.length;
+            searchInputRef.current.setSelectionRange(len, len);
+        }
+    }, [vendors, searchTerm]);
+
     const filteredAndSortedVendors = vendors
         .filter(vendor => {
-            const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                vendor.gst_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                vendor.email.toLowerCase().includes(searchTerm.toLowerCase());
-
+            // Search is now handled by backend Typesense - only filter by priority
             const matchesPriority = priorityFilter === 'all' || vendor.priority === priorityFilter;
 
-            return matchesSearch && matchesPriority;
+            return matchesPriority;
         })
         .sort((a, b) => {
             let aValue: any = a[sortField];
@@ -382,8 +439,10 @@ export default function Vendors() {
 
             // Refresh vendors list with stats
             const response = await purchaseApi.vendors.list();
+            // Handle pagination - extract results from paginated response or use array directly
+            const vendorsArray = Array.isArray(response) ? response : (response.results || []);
             const vendorsWithStats = await Promise.all(
-                response.map(async (vendor) => {
+                vendorsArray.map(async (vendor) => {
                     try {
                         const summary = await purchaseApi.vendors.paymentSummary(vendor.id);
                         return {
@@ -537,8 +596,10 @@ export default function Vendors() {
 
             // Step 3: Refresh vendors list
             const response = await purchaseApi.vendors.list();
+            // Handle pagination - extract results from paginated response or use array directly
+            const vendorsArray = Array.isArray(response) ? response : (response.results || []);
             const vendorsWithStats = await Promise.all(
-                response.map(async (vendor) => {
+                vendorsArray.map(async (vendor) => {
                     try {
                         const summary = await purchaseApi.vendors.paymentSummary(vendor.id);
                         return {
@@ -892,13 +953,20 @@ export default function Vendors() {
                 <CardContent className="pt-6">
                     <div className="flex gap-4">
                         <div className="flex-1">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                <Input
+                            <div className="flex flex-col">
+                                <label className="text-xs text-muted-foreground mb-1">Search</label>
+                                <input
+                                    ref={searchInputRef}
+                                    className="h-9 rounded-md border bg-background px-3 text-sm"
                                     placeholder="Search vendors by name, GST number, or email..."
+                                    aria-label="Search vendors"
                                     value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10"
+                                    onFocus={() => { wasInputFocusedRef.current = true; }}
+                                    onBlur={() => { wasInputFocusedRef.current = false; }}
+                                    onChange={(e) => {
+                                        wasInputFocusedRef.current = true;
+                                        setSearchTerm(e.target.value);
+                                    }}
                                 />
                             </div>
                         </div>

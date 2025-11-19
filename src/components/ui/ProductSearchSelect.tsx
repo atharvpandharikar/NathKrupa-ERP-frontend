@@ -27,7 +27,7 @@ export function ProductSearchSelect({ value, onValueChange, placeholder = "Selec
     // Fetch products with search
     const { data: products = [], isLoading } = useQuery({
         queryKey: ['shop', 'products', searchTerm],
-        queryFn: () => shopProductsApi.list({ search: searchTerm, ordering: '-created_at' }),
+        queryFn: () => shopProductsApi.list({ search: searchTerm, ordering: '-id' }),
         enabled: isOpen,
         staleTime: 30_000,
         gcTime: 5 * 60_000,

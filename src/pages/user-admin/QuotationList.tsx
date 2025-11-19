@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/pagination';
 import { toast } from 'sonner';
 import { shopApi } from '@/lib/api';
+import { shopQuotationsApi } from '@/lib/shop-api';
 import { formatDate } from '@/utils/formatters';
 import QuotationStatsCards from '@/components/QuotationStatsCards';
 import {
@@ -40,6 +41,7 @@ import {
     Phone,
     Mail,
     ExternalLink,
+    MessageCircle,
 } from 'lucide-react';
 import {
     ApiResponse,
@@ -72,7 +74,13 @@ const getStats = (
 };
 
 // Memoized table row component for better performance
-const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; index: number; offset: number }) => {
+const QuotationRow = React.memo(({ quote, index, offset, onSendWhatsapp, sendingWhatsapp }: { 
+    quote: Quotation; 
+    index: number; 
+    offset: number;
+    onSendWhatsapp: (quotationNo: string) => void;
+    sendingWhatsapp: string | null;
+}) => {
     const displayIndex = offset + index + 1;
     const downloadHref = quote.quotation_pdf;
     const quotationLabel = quote.summary?.org_name || `#${quote.quotation_no ?? '—'}`;
@@ -83,6 +91,7 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
     const totalDisplay = quote.summary?.total_after_discount != null
         ? `₹ ${quote.summary.total_after_discount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
         : '—';
+    const hasContact = contactNo && contactNo !== '—' && contactNo.trim().length > 0;
 
     return (
         <TableRow
@@ -180,23 +189,38 @@ const QuotationRow = React.memo(({ quote, index, offset }: { quote: Quotation; i
             </TableCell>
 
             <TableCell>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    asChild
-                    className={`hover:bg-primary hover:text-primary-foreground' gap-2 transition-all duration-200`}
-                    title={'View quotation details'}
-                >
-                    <Link
-                        to={`/user-admin/create-quote?quotation_no=${quote.quotation_no}&quotation_json=${quote.quotation_json}&quotation_pdf=${quote.quotation_pdf}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className={`hover:bg-primary hover:text-primary-foreground' gap-2 transition-all duration-200`}
+                        title={'View quotation details'}
                     >
-                        <Eye className="h-3 w-3" />
-                        View
-                        <ExternalLink className="h-3 w-3" />
-                    </Link>
-                </Button>
+                        <Link
+                            to={`/user-admin/create-quote?quotation_no=${quote.quotation_no}&quotation_json=${quote.quotation_json}&quotation_pdf=${quote.quotation_pdf}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <Eye className="h-3 w-3" />
+                            View
+                            <ExternalLink className="h-3 w-3" />
+                        </Link>
+                    </Button>
+                    {quote.quotation_no && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onSendWhatsapp(quote.quotation_no!)}
+                            disabled={sendingWhatsapp === quote.quotation_no || !hasContact}
+                            className="gap-1.5 text-green-600 border-green-600 hover:bg-green-50 hover:text-green-700 font-medium"
+                            title={hasContact ? "Send via WhatsApp" : "Contact number required"}
+                        >
+                            <MessageCircle className="h-3.5 w-3.5" />
+                            <span className="text-xs">{sendingWhatsapp === quote.quotation_no ? 'Sending...' : 'WhatsApp'}</span>
+                        </Button>
+                    )}
+                </div>
             </TableCell>
         </TableRow>
     );
@@ -207,6 +231,7 @@ export default function QuotationList() {
     const [loading, setLoading] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
+    const [sendingWhatsapp, setSendingWhatsapp] = useState<string | null>(null);
     const [stats, setStats] = useState<QuotationStats>({
         todayCount: 0,
         recentCount: 0,
@@ -245,6 +270,23 @@ export default function QuotationList() {
     }, [currentPage]);
 
     const handlePageChange = useCallback((page: number) => setCurrentPage(page), []);
+
+    const handleSendWhatsapp = async (quotationNo: string) => {
+        setSendingWhatsapp(quotationNo);
+        try {
+            const result = await shopQuotationsApi.sendWhatsapp(quotationNo);
+            if (result.error) {
+                toast.error(result.data?.message || 'Failed to send WhatsApp');
+            } else {
+                toast.success(result.data?.message || 'Quotation PDF sent via WhatsApp');
+            }
+        } catch (e: any) {
+            const msg = e?.response?.data?.data || e?.message || 'Unknown error';
+            toast.error(`Failed to send WhatsApp: ${msg}`);
+        } finally {
+            setSendingWhatsapp(null);
+        }
+    };
 
     const renderPageNumbers = () => {
         if (totalPages <= 1) return null;
@@ -430,6 +472,8 @@ export default function QuotationList() {
                                                 quote={quote}
                                                 index={index}
                                                 offset={offset}
+                                                onSendWhatsapp={handleSendWhatsapp}
+                                                sendingWhatsapp={sendingWhatsapp}
                                             />
                                         ))
                                     )}

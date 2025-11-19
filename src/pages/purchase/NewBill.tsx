@@ -28,7 +28,7 @@ import {
     Calculator,
     Trash
 } from "lucide-react";
-import { purchaseApi, type Vendor, type PurchaseBill } from "@/lib/api";
+import { purchaseApi, type Vendor, type PurchaseBill, inventoryApiFunctions, type Unit } from "@/lib/api";
 import { shopProductsApi, type ShopProduct } from "@/lib/shop-api";
 import { toast } from "sonner";
 import AddProductForm from "@/components/AddProductForm";
@@ -47,6 +47,8 @@ interface BillItem {
     gst_amount: number;
     total: number;
     priceSource?: PriceSource; // Track the source of the price
+    unit_id?: number; // Unit ID
+    unit?: { id: number; name: string; code: string; is_decimal: boolean } | null; // Unit details
 }
 
 // LocalStorage key for drafts
@@ -68,6 +70,7 @@ export default function NewBill() {
     const navigate = useNavigate();
     const [vendors, setVendors] = useState<Vendor[]>([]);
     const [products, setProducts] = useState<ShopProduct[]>([]);
+    const [units, setUnits] = useState<Unit[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [showNewProductForm, setShowNewProductForm] = useState(false);
@@ -92,7 +95,9 @@ export default function NewBill() {
             gst_percent: 18,
             gst_amount: 0,
             total: 0,
-            priceSource: undefined
+            priceSource: undefined,
+            unit_id: undefined,
+            unit: null
         }
     ]);
 
@@ -153,13 +158,35 @@ export default function NewBill() {
             try {
                 setLoading(true);
 
-                // Fetch vendors
+                // Fetch vendors - handle pagination
                 const vendorsResponse = await purchaseApi.vendors.list();
-                setVendors(Array.isArray(vendorsResponse) ? vendorsResponse : []);
+                // Extract results from paginated response or use array directly
+                const vendorsData = Array.isArray(vendorsResponse) ? vendorsResponse : (vendorsResponse.results || []);
+                setVendors(vendorsData);
 
                 // Fetch products
-                const productsResponse = await shopProductsApi.list({ ordering: '-created_at' });
+                const productsResponse = await shopProductsApi.list({ ordering: '-id' });
                 setProducts(Array.isArray(productsResponse) ? productsResponse : []);
+                
+                // Fetch units from inventory API
+                try {
+                    const unitsResponse = await inventoryApiFunctions.units.list();
+                    if (Array.isArray(unitsResponse)) {
+                        setUnits(unitsResponse);
+                        console.log(`✅ Loaded ${unitsResponse.length} units from inventory API`);
+                    } else if (unitsResponse?.results) {
+                        // Handle paginated response
+                        setUnits(unitsResponse.results);
+                        console.log(`✅ Loaded ${unitsResponse.results.length} units from inventory API (paginated)`);
+                    } else {
+                        console.warn('⚠️ Unexpected units response format:', unitsResponse);
+                        setUnits([]);
+                    }
+                } catch (unitsError) {
+                    console.error('❌ Failed to fetch units from inventory API:', unitsError);
+                    toast.error('Failed to load units. Please check inventory API connection.');
+                    setUnits([]); // Set empty array so dropdown still works
+                }
             } catch (error) {
                 console.error('Failed to fetch data:', error);
                 toast.error('Failed to load data');
@@ -228,6 +255,16 @@ export default function NewBill() {
                 newItems[index].product = selectedProduct;
                 // Auto-detect GST% from product's taxes field, default to 18% if not available
                 newItems[index].gst_percent = selectedProduct.taxes ?? 18;
+                
+                // Set unit from product if available
+                const productUnit = (selectedProduct as any).unit;
+                if (productUnit) {
+                    newItems[index].unit = productUnit;
+                    newItems[index].unit_id = productUnit.id;
+                } else {
+                    newItems[index].unit = null;
+                    newItems[index].unit_id = undefined;
+                }
 
                 // Only auto-fetch price if it wasn't manually entered (new product selection)
                 if (newItems[index].priceSource !== 'manual') {
@@ -240,6 +277,21 @@ export default function NewBill() {
                         resolvePrice(newItems[index], 'product-default', defaultPrice);
                     }
                 }
+            }
+        }
+        
+        // If unit is changed
+        if (field === 'unit_id') {
+            const selectedUnit = units.find(u => u.id === value);
+            if (selectedUnit) {
+                newItems[index].unit = {
+                    id: selectedUnit.id,
+                    name: selectedUnit.name,
+                    code: selectedUnit.code,
+                    is_decimal: selectedUnit.is_decimal
+                };
+            } else {
+                newItems[index].unit = null;
             }
         }
 
@@ -266,7 +318,9 @@ export default function NewBill() {
             gst_percent: 18,
             gst_amount: 0,
             total: 0,
-            priceSource: undefined
+            priceSource: undefined,
+            unit_id: undefined,
+            unit: null
         }]);
     };
 
@@ -316,7 +370,8 @@ export default function NewBill() {
                     quantity: item.quantity,
                     purchase_price: item.purchase_price,
                     gst_percent: item.gst_percent,
-                    product_id: item.product_id
+                    product_id: item.product_id,
+                    unit_id: item.unit_id || undefined
                 }))
             };
 
@@ -407,7 +462,9 @@ export default function NewBill() {
                             gst_percent: 18,
                             gst_amount: 0,
                             total: 0,
-                            priceSource: undefined
+                            priceSource: undefined,
+                            unit_id: undefined,
+                            unit: null
                         }]);
                         toast.success('Draft cleared successfully');
                     }}
@@ -525,6 +582,7 @@ export default function NewBill() {
                                     <TableRow>
                                         <TableHead>Product *</TableHead>
                                         <TableHead>Quantity *</TableHead>
+                                        <TableHead>Unit</TableHead>
                                         <TableHead>Unit Price *</TableHead>
                                         <TableHead>GST %</TableHead>
                                         <TableHead>GST Amount</TableHead>
@@ -581,6 +639,30 @@ export default function NewBill() {
                                                         +
                                                     </Button>
                                                 </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Select
+                                                    value={item.unit_id?.toString() || "none"}
+                                                    onValueChange={(value) => {
+                                                        if (value === "none") {
+                                                            updateItem(index, 'unit_id', undefined);
+                                                        } else {
+                                                            updateItem(index, 'unit_id', parseInt(value));
+                                                        }
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="w-full">
+                                                        <SelectValue placeholder={item.unit ? item.unit.code : "N/A"} />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">N/A</SelectItem>
+                                                        {units.map((unit) => (
+                                                            <SelectItem key={unit.id} value={unit.id.toString()}>
+                                                                {unit.code} ({unit.name})
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                             </TableCell>
                                             <TableCell>
                                                 <Input

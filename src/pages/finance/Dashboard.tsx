@@ -101,13 +101,16 @@ export default function FinanceDashboard() {
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
-            // Fetch accounts
-            const accountsData = await financeApi.get<Account[]>('/accounts/');
+            // Fetch accounts - handle pagination
+            const accountsResponse = await financeApi.get<any>('/accounts/?page_size=1000');
+            // Extract results from paginated response or use array directly
+            const accountsData = Array.isArray(accountsResponse) ? accountsResponse : (accountsResponse.results || []);
             setAccounts(accountsData);
 
-            // Fetch recent transactions
-            const transactionsData = await financeApi.get<Transaction[]>('/transactions/');
-            setRecentTransactions(transactionsData.slice(0, 10)); // Get first 10
+            // ROOT CAUSE FIX: Use dedicated recent endpoint instead of fetching all transactions
+            // This endpoint returns only 10 transactions, reducing data transfer by ~99%
+            const transactionsData = await financeApi.get<Transaction[]>('/transactions/recent/');
+            setRecentTransactions(transactionsData);
 
             // Calculate total balance from accounts
             const totalBalance = accountsData.reduce((sum, account) => sum + (account.current_balance || 0), 0);

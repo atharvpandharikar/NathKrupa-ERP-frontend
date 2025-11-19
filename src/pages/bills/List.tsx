@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { RefreshCw, Search, Plus, Eye, Settings, FileText, Printer, Download, TestTube } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -17,14 +17,39 @@ import { useToast } from "@/hooks/use-toast";
 export default function BillsList() {
     const [searchParams, setSearchParams] = useSearchParams();
     const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchParams.get("search") || "");
     const [dateFilter, setDateFilter] = useState(searchParams.get("date") || "all");
     const [testModeFilter, setTestModeFilter] = useState(searchParams.get("test_mode") || "all");
     const { toast } = useToast();
 
-    // Fetch bills
+    // Debounce search term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+            const newParams = new URLSearchParams(searchParams);
+            if (searchTerm) {
+                newParams.set("search", searchTerm);
+            } else {
+                newParams.delete("search");
+            }
+            setSearchParams(newParams);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchTerm, searchParams, setSearchParams]);
+
+    // Fetch bills - use Typesense search if search term provided
     const listQuery = useQuery({
-        queryKey: ["bills"],
-        queryFn: () => billsApi.list()
+        queryKey: ["bills", debouncedSearchTerm],
+        queryFn: async () => {
+            if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
+                // Use Typesense search
+                const searchResponse = await billsApi.search(debouncedSearchTerm, testModeFilter === "all");
+                return searchResponse.results || [];
+            } else {
+                // Use regular list
+                return billsApi.list();
+            }
+        }
     });
 
     const items: Bill[] = listQuery.data ?
@@ -32,19 +57,11 @@ export default function BillsList() {
 
     // No status grouping needed
 
-    // Filter and search
+    // Filter and search - now only client-side filtering for date and test mode
     const filteredItems = useMemo(() => {
         let filtered = items;
 
-        if (searchTerm) {
-            filtered = filtered.filter(item =>
-                item.bill_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.work_order?.quotation?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.quotation?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.work_order?.quotation?.quotation_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                item.quotation?.quotation_number?.toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        }
+        // Search is now handled by Typesense - no client-side search filtering needed
 
         // Date filtering
         if (dateFilter !== "all") {
@@ -83,7 +100,7 @@ export default function BillsList() {
         }
 
         return filtered;
-    }, [items, searchTerm, dateFilter, testModeFilter]);
+    }, [items, dateFilter, testModeFilter]);
 
     const stats = {
         total: items.length,
@@ -92,12 +109,7 @@ export default function BillsList() {
 
     const handleSearch = (value: string) => {
         setSearchTerm(value);
-        if (value) {
-            searchParams.set("search", value);
-        } else {
-            searchParams.delete("search");
-        }
-        setSearchParams(searchParams);
+        // URL params are updated in debounce effect
     };
 
     const handleDateFilter = (value: string) => {

@@ -72,7 +72,10 @@ export default function LowStock() {
             console.log('Low stock API response:', data);
             return data;
         },
-        refetchInterval: 60000, // Refetch every minute
+        // COST OPTIMIZATION: Reduced polling from 60 seconds to 5 minutes
+        // Low stock status doesn't change frequently enough to warrant minute-by-minute polling
+        refetchInterval: 300000, // Refetch every 5 minutes (was 60 seconds) - reduces API calls by 80%
+        staleTime: 300000, // Consider data fresh for 5 minutes
     });
 
     // Calculate status for a product

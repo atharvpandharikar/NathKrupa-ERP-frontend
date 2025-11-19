@@ -25,9 +25,19 @@ export default function Customers() {
 
   const queryClient = useQueryClient();
   const { data: customersData, isLoading, isError, error } = useQuery({
-    // include search term so we do server-side filtering (DRF SearchFilter)
+    // Use Typesense search if searchTerm is provided, otherwise use list
     queryKey: ['customers', searchTerm],
-    queryFn: () => customersApi.list(searchTerm || undefined).then(r => Array.isArray(r) ? r : r.results),
+    queryFn: async () => {
+      if (searchTerm && searchTerm.trim()) {
+        // Use lightning-fast Typesense search
+        const searchResponse = await customersApi.search(searchTerm);
+        return searchResponse.results || [];
+      } else {
+        // Use regular list endpoint
+        const response = await customersApi.list();
+        return Array.isArray(response) ? response : response.results;
+      }
+    },
   });
 
   const createMutation = useMutation({
@@ -44,11 +54,8 @@ export default function Customers() {
   }, [organizationName]);
 
   const customers: Customer[] = customersData || [];
-  const filteredCustomers = useMemo(() => customers.filter(customer =>
-    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.phone_number.includes(searchTerm) ||
-    (customer.email || '').toLowerCase().includes(searchTerm.toLowerCase())
-  ), [customers, searchTerm]);
+  // No need for client-side filtering - server-side Typesense search handles it
+  const filteredCustomers = customers;
 
   const totalCustomers = customers.length;
   const verifiedCustomers = customers.filter(c => c.email).length;

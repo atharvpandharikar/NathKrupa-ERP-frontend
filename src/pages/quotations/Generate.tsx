@@ -136,12 +136,16 @@ export default function GenerateQuotation() {
   const [errors, setErrors] = useState<Partial<CustomerInfo>>({});
   useEffect(() => {
     document.title = `Generate Quotation | ${organizationName}`;
-    // load vehicle types, makers, and categories
+    // load vehicle types, makers, and categories - handle pagination
     Promise.all([
-      api.get<VehicleType[]>("/vehicle-types/"),
-      api.get<VehicleMaker[]>("/vehicle-makers/"),
-      api.get<FeatureCategory[]>("/feature-categories/")
-    ]).then(([vt, mk, fc]) => {
+      api.get<any>("/vehicle-types/?page_size=1000"),
+      api.get<any>("/vehicle-makers/?page_size=1000"),
+      api.get<any>("/feature-categories/?page_size=1000")
+    ]).then(([vtRes, mkRes, fcRes]) => {
+      // Extract results from paginated response or use array directly
+      const vt = Array.isArray(vtRes) ? vtRes : (vtRes.results || []);
+      const mk = Array.isArray(mkRes) ? mkRes : (mkRes.results || []);
+      const fc = Array.isArray(fcRes) ? fcRes : (fcRes.results || []);
       setVTypes(vt);
       setMakers(mk);
       setCats(fc);
@@ -161,8 +165,10 @@ export default function GenerateQuotation() {
   // When vehicle type changes, load models by type
   useEffect(() => {
     if (!vehicle.typeId) { setModelsByType([]); setModelsForMaker([]); return; }
-    api.get<VehicleModel[]>(`/vehicle-models/by_vehicle_type/?vehicle_type_id=${vehicle.typeId}`)
-      .then(ms => {
+    api.get<any>(`/vehicle-models/by_vehicle_type/?vehicle_type_id=${vehicle.typeId}&page_size=1000`)
+      .then(msRes => {
+        // Extract results from paginated response or use array directly
+        const ms = Array.isArray(msRes) ? msRes : (msRes.results || []);
         setModelsByType(ms);
         const validMakerIds = new Set(ms.map(m => m.maker.id));
         if (vehicle.makerId && !validMakerIds.has(vehicle.makerId)) {
@@ -205,12 +211,12 @@ export default function GenerateQuotation() {
     const relevantCategoryIds = [categoryId, ...subCats(categoryId).map(sc => sc.id)];
 
     try {
-      // Fetch feature types and prices for each category separately and aggregate
+      // Fetch feature types and prices for each category separately and aggregate - handle pagination
       const typePromises = relevantCategoryIds.map(cid =>
-        api.get<FeatureType[]>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}&category_id=${cid}`)
+        api.get<any>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}&category_id=${cid}&page_size=1000`)
       );
       const pricePromises = relevantCategoryIds.map(cid =>
-        api.get<FeaturePrice[]>(`/feature-prices/?vehicle_model=${vehicle.modelId}&feature_category=${cid}`)
+        api.get<any>(`/feature-prices/?vehicle_model=${vehicle.modelId}&feature_category=${cid}&page_size=1000`)
       );
 
       const [ftsArrays, fpsArrays] = await Promise.all([
@@ -218,8 +224,9 @@ export default function GenerateQuotation() {
         Promise.all(pricePromises)
       ]);
 
-      const fts = ftsArrays.flat();
-      const fps = fpsArrays.flat();
+      // Extract results from paginated responses or use arrays directly
+      const fts = ftsArrays.flatMap(ftRes => Array.isArray(ftRes) ? ftRes : (ftRes.results || []));
+      const fps = fpsArrays.flatMap(fpRes => Array.isArray(fpRes) ? fpRes : (fpRes.results || []));
 
       setTypesForModel(prev => [...prev, ...fts]);
 
@@ -734,7 +741,9 @@ export default function GenerateQuotation() {
                             // Use the appropriate price ID for the API call
                             const priceId = featureEntry ? featureEntry.fpId : categoryEntry.fpId;
                             console.log('Fetching images for priceId:', priceId);
-                            const imgs = await api.get<FeatureImage[]>(`/feature-images/?feature_price=${priceId}`);
+                            const imgsRes = await api.get<any>(`/feature-images/?feature_price=${priceId}&page_size=1000`);
+                            // Extract results from paginated response or use array directly
+                            const imgs = Array.isArray(imgsRes) ? imgsRes : (imgsRes.results || []);
                             console.log('Loaded images:', imgs);
                             setImagesByFt(prev => ({ ...prev, [ftId]: imgs }));
                           } catch (error) {

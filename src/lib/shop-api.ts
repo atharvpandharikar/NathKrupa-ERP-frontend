@@ -178,6 +178,13 @@ export interface ShopProduct {
     updated_at?: string;
 }
 
+export interface ProductListSummary {
+    total: number;
+    active: number;
+    inactive: number;
+    low_stock: number;
+}
+
 export interface ShopCategory {
     id: string;
     ref_name: string;
@@ -355,10 +362,10 @@ export interface ShopQuotation {
 
 // Specialized API functions
 export const shopProductsApi = {
-    list: async (params?: Record<string, any>) => {
+    list: async (params?: Record<string, any>): Promise<ShopProduct[]> => {
         const queryParams = new URLSearchParams();
         const defaults: Record<string, any> = {
-            ordering: '-created_at',
+            ordering: '-id',
         };
 
         const combined = { ...defaults, ...(params || {}) };
@@ -394,6 +401,51 @@ export const shopProductsApi = {
         return fetchAll<ShopProduct>(url);
     },
 
+    // New method for paginated list that returns both data and count
+    listPaginated: async (params?: Record<string, any>): Promise<{ data: ShopProduct[]; count: number; summary?: ProductListSummary }> => {
+        const queryParams = new URLSearchParams();
+        const defaults: Record<string, any> = {
+            ordering: '-id',
+        };
+
+        const combined = { ...defaults, ...(params || {}) };
+        Object.entries(combined).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.append(key, value.toString());
+            }
+        });
+
+        const url = `/shop-product-list/?${queryParams.toString()}`;
+
+        console.log('🔍 [FRONTEND DEBUG] API Request:', { url, params: combined });
+
+        try {
+            // Backend returns: { error: False, count: number, data: ShopProduct[], summary: {...} }
+            const response = await shopApi.get<any>(url);
+
+            // Primary response format: { error: False, count: number, data: [], summary: {} }
+            if (response && !response.error && typeof response.count === 'number' && Array.isArray(response.data)) {
+                return { data: response.data as ShopProduct[], count: response.count, summary: response.summary };
+            }
+
+            // Fallback: DRF standard pagination format { count, next, previous, results }
+            if (response && typeof response.count === 'number' && Array.isArray(response.results)) {
+                return { data: response.results as ShopProduct[], count: response.count, summary: response.summary };
+            }
+
+            // Fallback: Direct array response
+            if (Array.isArray(response)) {
+                return { data: response as ShopProduct[], count: response.length };
+            }
+
+            console.error('❌ Unexpected response format:', response);
+            throw new Error(`Unexpected response format from product list endpoint.`);
+        } catch (error) {
+            console.error('⚠️ Error fetching paginated products:', error);
+            throw error;
+        }
+    },
+
     get: async (productId: string) => {
         const response = await shopApi.get<any>(`/shop-product-detailview/${productId}/`);
         return response.error ? null : response.product_data?.[0];
@@ -409,6 +461,18 @@ export const shopProductsApi = {
     search: async (query: string) => {
         const response = await shopApi.get<any>(`/search-parts/?search=${encodeURIComponent(query)}`);
         return response.error ? [] : response.data || [];
+    },
+
+    searchTypesense: async (query: string, params?: { limit?: number; page?: number; filter_by?: string }) => {
+        if (!query.trim()) {
+            return { error: false, data: [], count: 0, search_time_ms: 0 };
+        }
+        const searchParams = new URLSearchParams({ q: query.trim() });
+        if (params?.limit) searchParams.append('per_page', params.limit.toString());
+        if (params?.page) searchParams.append('page', params.page.toString());
+        if (params?.filter_by) searchParams.append('filter_by', params.filter_by);
+        const response = await shopApi.get<any>(`/shop/typesense-search/?${searchParams.toString()}`);
+        return response;
     },
 
     exportProducts: async (params: {
@@ -788,6 +852,12 @@ export const shopQuotationsApi = {
         shopApi.put<ShopQuotation>(`/shop/generate-quotation-shop/${id}/`, data),
 
     delete: (id: string) => shopApi.del(`/shop/generate-quotation-shop/${id}/`),
+
+    sendWhatsapp: (quotation_no: string) =>
+        shopApi.post<{ error: boolean; data: { message: string; message_id?: string } }>(
+            `/shop/generate-quotation-shop/send_whatsapp/?quotation_no=${quotation_no}`,
+            {}
+        ),
 };
 
 // Export all APIs
