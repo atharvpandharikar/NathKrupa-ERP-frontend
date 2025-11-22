@@ -865,132 +865,130 @@ export function CreateQuote() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="overflow-x-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow className="bg-muted/50">
-                                            <TableHead className="w-12 text-center">#</TableHead>
-                                            <TableHead className="min-w-[250px]">
-                                                Product Name
-                                            </TableHead>
-                                            <TableHead className="w-28 text-center">HSN Code</TableHead>
-                                            <TableHead className="w-[100px] text-center">
-                                                Qty
-                                            </TableHead>
-                                            <TableHead className="w-20 text-center">Unit</TableHead>
-                                            <TableHead className="w-28 text-right">
-                                                Price (₹)
-                                            </TableHead>
-                                            <TableHead className="w-28 text-right">
-                                                Amount (₹)
-                                            </TableHead>
-                                            <TableHead className="w-20 text-center">Tax %</TableHead>
-                                            <TableHead className="w-28 text-right">Tax (₹)</TableHead>
-                                            <TableHead className="w-28 text-right">
-                                                Total (₹)
-                                            </TableHead>
-                                            <TableHead className="w-12"></TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {items.map((item, index) => (
-                                            <TableRow key={item.id} className="hover:bg-muted/20">
-                                                <TableCell className="text-muted-foreground text-center font-medium">
-                                                    {index + 1}
-                                                </TableCell>
-                                                <TableCell className="py-4">
-                                                    <ProductSelector
-                                                        item={item}
-                                                        onProductSelect={(product, variant) =>
-                                                            handleProductSelect(item.id, product, variant)
-                                                        }
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="py-4">
-                                                    <Input
-                                                        placeholder="HSN Code"
-                                                        value={item.hsnCode || ''}
-                                                        onChange={e =>
-                                                            updateItem(item.id, {
-                                                                hsnCode: e.target.value,
-                                                            })
-                                                        }
-                                                        className="w-[80px] text-center"
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="py-4">
-                                                    <Input
-                                                        value={item.quantity}
-                                                        onChange={e =>
-                                                            updateItem(item.id, {
-                                                                quantity: Math.max(
-                                                                    1,
-                                                                    parseInt(e.target.value) || 1,
-                                                                ),
-                                                            })
-                                                        }
-                                                        className="w-[50px] text-center"
-                                                        min="1"
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="py-4 text-center text-sm text-muted-foreground">
-                                                    {item.unit?.code || 'N/A'}
-                                                </TableCell>
-                                                <TableCell className="py-4">
-                                                    <Input
-                                                        value={item.listPrice}
-                                                        onChange={e =>
-                                                            updateItem(item.id, {
-                                                                listPrice: Math.max(
-                                                                    0,
-                                                                    parseFloat(e.target.value) || 0,
-                                                                ),
-                                                            })
-                                                        }
-                                                        className="w-[70px]"
-                                                        min="0"
-                                                        step="0.01"
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="py-4 text-right font-medium">
-                                                    {formatCurrency(item.amount)}
-                                                </TableCell>
-                                                <TableCell className="py-4">
-                                                    <TaxSelector
-                                                        value={item.taxPercentage}
-                                                        onChange={value =>
-                                                            updateItem(item.id, { taxPercentage: value })
-                                                        }
-                                                        disabled={billWithoutGST}
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="py-4 text-right font-medium">
-                                                    ₹
-                                                    {item.taxAmount.toLocaleString('en-IN', {
-                                                        minimumFractionDigits: 2,
-                                                    })}
-                                                </TableCell>
-                                                <TableCell className="py-4 text-right font-semibold">
-                                                    ₹
-                                                    {item.total.toLocaleString('en-IN', {
-                                                        minimumFractionDigits: 2,
-                                                    })}
-                                                </TableCell>
-                                                <TableCell className="py-4">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => removeRow(item.id)}
-                                                        disabled={items.length === 1}
-                                                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 bg-destructive/10 cursor-pointer"
-                                                    >
-                                                        <Trash2 size={16} className="text-destructive" />
-                                                    </Button>
-                                                </TableCell>
+                            <div className="overflow-x-auto -mx-6 px-6">
+                                <div className="min-w-[1000px]">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-muted/50">
+                                                <TableHead className="w-12 text-center">#</TableHead>
+                                                <TableHead className="min-w-[200px]">
+                                                    Product Name
+                                                </TableHead>
+                                                <TableHead className="w-24 text-center">HSN</TableHead>
+                                                <TableHead className="w-20 text-center">
+                                                    Qty
+                                                </TableHead>
+                                                <TableHead className="w-16 text-center">Unit</TableHead>
+                                                <TableHead className="w-24 text-right">
+                                                    Price
+                                                </TableHead>
+                                                <TableHead className="w-24 text-right">
+                                                    Amount
+                                                </TableHead>
+                                                <TableHead className="w-16 text-center">Tax%</TableHead>
+                                                <TableHead className="w-24 text-right">Tax</TableHead>
+                                                <TableHead className="w-28 text-right">
+                                                    Total
+                                                </TableHead>
+                                                <TableHead className="w-12"></TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {items.map((item, index) => (
+                                                <TableRow key={item.id} className="hover:bg-muted/20">
+                                                    <TableCell className="text-muted-foreground text-center font-medium">
+                                                        {index + 1}
+                                                    </TableCell>
+                                                    <TableCell className="py-4">
+                                                        <ProductSelector
+                                                            item={item}
+                                                            onProductSelect={(product, variant) =>
+                                                                handleProductSelect(item.id, product, variant)
+                                                            }
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="py-4">
+                                                        <Input
+                                                            placeholder="HSN"
+                                                            value={item.hsnCode || ''}
+                                                            onChange={e =>
+                                                                updateItem(item.id, {
+                                                                    hsnCode: e.target.value,
+                                                                })
+                                                            }
+                                                            className="w-20 text-center text-sm"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="py-4">
+                                                        <Input
+                                                            type="number"
+                                                            value={item.quantity}
+                                                            onChange={e =>
+                                                                updateItem(item.id, {
+                                                                    quantity: Math.max(
+                                                                        1,
+                                                                        parseInt(e.target.value) || 1,
+                                                                    ),
+                                                                })
+                                                            }
+                                                            className="w-16 text-center text-sm"
+                                                            min="1"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="py-4 text-center text-xs text-muted-foreground">
+                                                        {item.unit?.code || '-'}
+                                                    </TableCell>
+                                                    <TableCell className="py-4">
+                                                        <Input
+                                                            type="number"
+                                                            value={item.listPrice}
+                                                            onChange={e =>
+                                                                updateItem(item.id, {
+                                                                    listPrice: Math.max(
+                                                                        0,
+                                                                        parseFloat(e.target.value) || 0,
+                                                                    ),
+                                                                })
+                                                            }
+                                                            className="w-20 text-sm"
+                                                            min="0"
+                                                            step="0.01"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="py-4 text-right font-medium text-sm">
+                                                        {formatCurrency(item.amount)}
+                                                    </TableCell>
+                                                    <TableCell className="py-4">
+                                                        <TaxSelector
+                                                            value={item.taxPercentage}
+                                                            onChange={value =>
+                                                                updateItem(item.id, { taxPercentage: value })
+                                                            }
+                                                            disabled={billWithoutGST}
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell className="py-4 text-right font-medium text-sm">
+                                                        ₹{item.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                    <TableCell className="py-4 text-right font-semibold text-sm">
+                                                        ₹{item.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </TableCell>
+                                                    <TableCell className="py-4">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => removeRow(item.id)}
+                                                            disabled={items.length === 1}
+                                                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 bg-destructive/10 cursor-pointer"
+                                                        >
+                                                            <Trash2 size={16} className="text-destructive" />
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </div>
 
                             <div className="mt-6 flex items-center justify-between">

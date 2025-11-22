@@ -313,8 +313,8 @@ export default function QuotationList() {
     };
 
     return (
-        <div className="mx-auto max-w-[95%]">
-            <div className="mb-6">
+        <div className="mx-auto max-w-[98%]">
+            <div className="mb-4">
                 <QuotationStatsCards
                     stats={stats}
                     icons={{
