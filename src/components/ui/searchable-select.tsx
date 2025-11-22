@@ -114,24 +114,6 @@ export function SearchableSelect({
         }
     }, [open]);
 
-    // Handle wheel scrolling
-    const handleWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop += e.deltaY;
-        }
-    };
-
-    // Alternative approach: Handle wheel on the entire popover content
-    const handlePopoverWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop += e.deltaY;
-        }
-    };
-
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
@@ -160,7 +142,7 @@ export function SearchableSelect({
                     </div>
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-full p-0" align="start" onWheel={handlePopoverWheel}>
+            <PopoverContent className="w-full p-0" align="start">
                 <Command shouldFilter={!onSearch}> {/* Disable Command's internal filtering if onSearch is present */}
                     <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
@@ -176,7 +158,6 @@ export function SearchableSelect({
                     <div
                         ref={scrollContainerRef}
                         className="max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400 scroll-smooth"
-                        onWheel={handleWheel}
                     >
                         {filteredOptions.length === 0 ? (
                             <div className="py-6 text-center text-sm text-muted-foreground">

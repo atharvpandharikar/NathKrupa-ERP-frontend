@@ -205,22 +205,23 @@ export default function NewBill() {
 
         try {
             console.log('🔍 Searching products:', query);
-            const response = await shopProductsApi.searchTypesense(query, { limit: 20 });
+            const response = await shopProductsApi.searchTypesense(query, { limit: 50 });
 
             if (response && response.data && Array.isArray(response.data)) {
                 const newProducts = response.data as ShopProduct[];
 
                 setProducts(prevProducts => {
-                    // Create a map of existing products by ID for fast lookup
-                    const existingIds = new Set(prevProducts.map(p => p.product_id));
+                    // We want to prioritize the new search results at the top of the list
+                    const newProductIds = new Set(newProducts.map(p => p.product_id));
+                    
+                    // Keep existing products that are NOT in the new search results
+                    // This preserves selected items or previously loaded items
+                    const existingKept = prevProducts.filter(p => !newProductIds.has(p.product_id));
 
-                    // Filter out duplicates
-                    const uniqueNewProducts = newProducts.filter(p => !existingIds.has(p.product_id));
-
-                    if (uniqueNewProducts.length === 0) return prevProducts;
-
-                    console.log(`✅ Added ${uniqueNewProducts.length} products from search`);
-                    return [...prevProducts, ...uniqueNewProducts];
+                    console.log(`✅ Merged ${newProducts.length} search results with ${existingKept.length} existing products`);
+                    
+                    // Put new search results first
+                    return [...newProducts, ...existingKept];
                 });
             }
         } catch (error) {
