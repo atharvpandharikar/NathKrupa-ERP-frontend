@@ -1074,8 +1074,8 @@ export default function GenerateQuotation() {
       </Card>
     </div>
 
-    <div className="flex justify-end">
-      <div className="text-xl font-bold sticky bottom-0">Total: ₹{totalWithCustom.toLocaleString()}</div>
+    <div className="flex justify-end sticky top-0 bg-background/95 backdrop-blur py-2 z-10 border-b">
+      <div className="text-xl font-bold">Total: ₹{totalWithCustom.toLocaleString()}</div>
     </div>
 
     {/* Customer Information Form */}

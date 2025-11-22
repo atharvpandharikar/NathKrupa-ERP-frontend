@@ -817,42 +817,51 @@ export default function Transactions() {
                                 />
                             </div>
 
-                            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Account" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Accounts</SelectItem>
-                                    {accounts.map((account) => (
-                                        <SelectItem key={account.id} value={account.id.toString()}>
-                                            {account.nickname}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <div className="flex flex-col">
+                                <label className="text-xs text-muted-foreground mb-1">Account</label>
+                                <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="All Accounts" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Accounts</SelectItem>
+                                        {accounts.map((account) => (
+                                            <SelectItem key={account.id} value={account.id.toString()}>
+                                                {account.nickname}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                            <Select value={selectedType} onValueChange={setSelectedType}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Transaction Type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Types</SelectItem>
-                                    <SelectItem value="Credit">Credit</SelectItem>
-                                    <SelectItem value="Debit">Debit</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <div className="flex flex-col">
+                                <label className="text-xs text-muted-foreground mb-1">Type</label>
+                                <Select value={selectedType} onValueChange={setSelectedType}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="All Types" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Types</SelectItem>
+                                        <SelectItem value="Credit">Credit</SelectItem>
+                                        <SelectItem value="Debit">Debit</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                            <Select value={sortBy} onValueChange={setSortBy}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Sort By" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="newest">Newest First</SelectItem>
-                                    <SelectItem value="oldest">Oldest First</SelectItem>
-                                    <SelectItem value="amount_high">Highest Amount</SelectItem>
-                                    <SelectItem value="amount_low">Lowest Amount</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <div className="flex flex-col">
+                                <label className="text-xs text-muted-foreground mb-1">Sort</label>
+                                <Select value={sortBy} onValueChange={setSortBy}>
+                                    <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Newest First" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="newest">Newest First</SelectItem>
+                                        <SelectItem value="oldest">Oldest First</SelectItem>
+                                        <SelectItem value="amount_high">Highest Amount</SelectItem>
+                                        <SelectItem value="amount_low">Lowest Amount</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
                         {/* Second row - Date filters */}

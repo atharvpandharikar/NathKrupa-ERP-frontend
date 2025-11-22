@@ -44,27 +44,27 @@ const QuotationStatsCards: React.FC<QuotationStatsCardsProps> = ({
     ];
 
     return (
-        <div className="mt-24 grid gap-6 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
             {cards.map((card, idx) => (
                 <div
                     key={idx}
                     className={`relative overflow-hidden rounded-xl bg-gradient-to-br p-1 ${card.accent} z-0 shadow-lg transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] before:from-white/10 before:to-transparent hover:scale-[1.010] dark:before:from-white/5`}
-                    style={{ minHeight: 160 }}
+                    style={{ minHeight: 120 }}
                 >
                     <Card className="relative z-10 flex h-full flex-col justify-between border-none bg-white/70 shadow-none backdrop-blur-xl transition-all duration-300 dark:bg-neutral-900/60">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 rounded-2xl pb-2">
-                            <CardTitle className="text-base font-semibold tracking-tight text-gray-800 dark:text-gray-100">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 rounded-2xl pb-1">
+                            <CardTitle className="text-sm font-semibold tracking-tight text-gray-800 dark:text-gray-100">
                                 {card.title}
                             </CardTitle>
-                            <span className="flex items-center justify-center rounded-full bg-white/60 p-2 shadow dark:bg-neutral-800/60">
+                            <span className="flex items-center justify-center rounded-full bg-white/60 p-1.5 shadow dark:bg-neutral-800/60">
                                 {card.icon}
                             </span>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-extrabold text-gray-900 drop-shadow-sm dark:text-white">
+                        <CardContent className="pb-3">
+                            <div className="text-2xl font-extrabold text-gray-900 drop-shadow-sm dark:text-white">
                                 {card.value}
                             </div>
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                                 {card.desc}
                             </p>
                         </CardContent>

@@ -64,12 +64,16 @@ export function Navbar() {
           <img
             src="https://nathkrupa-unified-storage.s3.ap-south-1.amazonaws.com/favicon.ico"
             alt="Nathkrupa"
-
             className="h-8 w-12"
           />
           <span className="text-black">{organizationName}</span>
         </Link>
-        <div className="text-xs sm:text-sm text-muted-foreground truncate">/ {breadcrumb}</div>
+        <div className="text-xs sm:text-sm text-muted-foreground truncate">
+          / <Link to="/app-selection" className="hover:underline">{breadcrumb.split(' / ')[0]}</Link>
+          {breadcrumb.split(' / ').slice(1).map((crumb, i) => (
+            <span key={i}> / {crumb}</span>
+          ))}
+        </div>
       </div>
       <nav className="flex items-center gap-3 text-sm">
         <Link to="/quotations/generate" className="hover:underline whitespace-nowrap">Generate Quote</Link>
