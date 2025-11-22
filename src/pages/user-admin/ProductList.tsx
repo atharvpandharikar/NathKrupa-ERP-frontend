@@ -81,6 +81,8 @@ export default function ProductList() {
 
     // Debounce search term - fixed to prevent focus loss
     const prevSearchTermRef = useRef<string>('');
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
     useEffect(() => {
         const timer = setTimeout(() => {
             // Only update if search term actually changed
@@ -93,6 +95,18 @@ export default function ProductList() {
         }, 300);
         return () => clearTimeout(timer);
     }, [searchTerm]); // Only depend on searchTerm to prevent unnecessary re-renders
+
+    // Restore focus to input after re-render if it was focused
+    useEffect(() => {
+        if (searchInputRef.current && document.activeElement !== searchInputRef.current && searchTerm) {
+            // Only restore if we have a search term (to avoid stealing focus on initial load)
+            // and check if we lost focus during the debounce update
+             searchInputRef.current.focus();
+        }
+        // Fix: removed 'productsData' from dependency array to avoid ReferenceError
+        // We only care about the effect running when searchTerm causes UI updates
+    }, [searchTerm]); // Re-run when search term changes
+
 
     // Fetch products with React Query (cached)
     const { data: productsData, isLoading, isError, error, refetch } = useQuery({
@@ -149,6 +163,7 @@ export default function ProductList() {
         },
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
         gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+        placeholderData: (previousData: any) => previousData, // Keep previous data while fetching to prevent UI flash
     });
 
     const products = productsData?.data || [];
@@ -439,6 +454,7 @@ export default function ProductList() {
         );
     };
 
+    // Only show skeleton on initial load when there's no data
     if (isLoading && !productsData) {
         return (
             <div className="max-w-7xl mx-auto">
@@ -471,6 +487,7 @@ export default function ProductList() {
                     <div className="relative flex-1 lg:flex-none">
                         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                         <Input
+                            ref={searchInputRef}
                             placeholder="Search products..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -502,6 +519,13 @@ export default function ProductList() {
                         >
                             <LayoutGrid className="w-3 h-3" />
                         </Button>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        {/* Showing fetching indicator near controls */}
+                        {isLoading && productsData && (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                        )}
                     </div>
 
                     <Button

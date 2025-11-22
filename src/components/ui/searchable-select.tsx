@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Check, ChevronsUpDown, Search, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ interface SearchableSelectProps {
     disabled?: boolean;
     allowClear?: boolean;
     onClear?: () => void;
+    onSearch?: (query: string) => void; // New prop for async search
 }
 
 export function SearchableSelect({
@@ -47,18 +48,24 @@ export function SearchableSelect({
     disabled = false,
     allowClear = false,
     onClear,
+    onSearch,
 }: SearchableSelectProps) {
     const [open, setOpen] = useState(false);
     const [searchValue, setSearchValue] = useState('');
+    const [isSearching, setIsSearching] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const selectedOption = useMemo(
         () => options.find((option) => option.value === value),
         [options, value]
     );
 
+    // Filter options locally if no onSearch is provided, otherwise show all options (filtered by server)
     const filteredOptions = useMemo(() => {
+        if (onSearch) return options; // Server-side filtering, so display what's given
+        
         if (!searchValue) return options;
 
         const searchLower = searchValue.toLowerCase();
@@ -67,7 +74,7 @@ export function SearchableSelect({
             const searchableMatch = option.searchableText?.toLowerCase().includes(searchLower);
             return labelMatch || searchableMatch;
         });
-    }, [options, searchValue]);
+    }, [options, searchValue, onSearch]);
 
     const handleSelect = (selectedValue: string) => {
         onValueChange?.(selectedValue);
@@ -80,10 +87,30 @@ export function SearchableSelect({
         onClear?.();
     };
 
+    // Debounced search handler
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newValue = e.target.value;
+        setSearchValue(newValue);
+
+        if (onSearch) {
+            setIsSearching(true);
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+            
+            searchTimeoutRef.current = setTimeout(() => {
+                onSearch(newValue);
+                setIsSearching(false);
+            }, 300); // 300ms debounce
+        }
+    };
+
     // Reset search when opening
     useEffect(() => {
         if (open) {
             setSearchValue('');
+            // Optionally trigger an empty search to reset list if needed
+            // if (onSearch) onSearch(''); 
         }
     }, [open]);
 
@@ -134,16 +161,17 @@ export function SearchableSelect({
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-full p-0" align="start" onWheel={handlePopoverWheel}>
-                <Command>
+                <Command shouldFilter={!onSearch}> {/* Disable Command's internal filtering if onSearch is present */}
                     <div className="flex items-center border-b px-3">
                         <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
                         <Input
                             ref={inputRef}
                             placeholder={searchPlaceholder}
                             value={searchValue}
-                            onChange={(e) => setSearchValue(e.target.value)}
+                            onChange={handleSearchChange}
                             className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
+                        {isSearching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                     </div>
                     <div
                         ref={scrollContainerRef}

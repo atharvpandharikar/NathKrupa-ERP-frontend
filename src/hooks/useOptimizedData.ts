@@ -23,6 +23,39 @@ function setCachedData<T>(key: string, data: T): void {
     dataCache.set(key, { data, timestamp: Date.now() });
 }
 
+type TransactionSortOption = 'newest' | 'oldest' | 'amount_high' | 'amount_low';
+
+const TRANSACTION_ORDERING_MAP: Record<TransactionSortOption, string> = {
+    newest: '-time',
+    oldest: 'time',
+    amount_high: '-amount',
+    amount_low: 'amount',
+};
+
+function sortTransactionsClientSide(items: any[], sort: TransactionSortOption): any[] {
+    const normalizedDate = (value?: string) => value ? new Date(value).getTime() : 0;
+    const normalizedAmount = (value?: number | string) => {
+        if (typeof value === 'number') return value;
+        const parsed = parseFloat(value || '0');
+        return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const list = [...items];
+
+    switch (sort) {
+        case 'newest':
+            return list.sort((a, b) => normalizedDate(b?.time || b?.created_at) - normalizedDate(a?.time || a?.created_at));
+        case 'oldest':
+            return list.sort((a, b) => normalizedDate(a?.time || a?.created_at) - normalizedDate(b?.time || b?.created_at));
+        case 'amount_high':
+            return list.sort((a, b) => normalizedAmount(b?.amount) - normalizedAmount(a?.amount));
+        case 'amount_low':
+            return list.sort((a, b) => normalizedAmount(a?.amount) - normalizedAmount(b?.amount));
+        default:
+            return list;
+    }
+}
+
 interface FeaturePrice {
     id: number;
     vehicle_model: { id: number; name: string };
@@ -165,7 +198,7 @@ export function useOptimizedQuotations(page = 1, pageSize = 20, searchTerm = '')
                 // Use Typesense search if searchTerm is provided, otherwise use paginated list
                 if (searchTerm && searchTerm.trim()) {
                     const { quotationApi } = await import('@/lib/api');
-                    const searchResponse = await quotationApi.search(searchTerm);
+                    const searchResponse = await quotationApi.search(searchTerm) as any;
                     setQuotations(searchResponse.results || []);
                     setTotalCount(searchResponse.count || 0);
                 } else {
@@ -193,37 +226,90 @@ export function useOptimizedQuotations(page = 1, pageSize = 20, searchTerm = '')
 /**
  * Optimized hook for fetching transactions with search
  */
-export function useOptimizedTransactions(searchTerm = '') {
+export function useOptimizedTransactions(
+    page = 1,
+    pageSize = 25,
+    filters?: {
+        account?: string;
+        type?: string;
+        dateFrom?: string;
+        dateTo?: string;
+        search?: string;
+        sort?: TransactionSortOption;
+    }
+) {
     const [transactions, setTransactions] = useState<any[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+    const refresh = useCallback(() => {
+        setRefreshTrigger(prev => prev + 1);
+    }, []);
 
     useEffect(() => {
+        const sortOption: TransactionSortOption = (filters?.sort as TransactionSortOption) || 'newest';
+        const searchValue = filters?.search?.trim() || '';
+
         const fetchTransactions = async () => {
             setLoading(true);
             try {
-                // Use Typesense search if searchTerm is provided, otherwise fetch all
-                if (searchTerm && searchTerm.trim()) {
-                    const { financeApi } = await import('@/lib/api');
-                    const searchResponse = await financeApi.searchTransactions(searchTerm);
-                    setTransactions(searchResponse.results || []);
+                const { financeApi } = await import('@/lib/api');
+
+                if (searchValue) {
+                    const searchResponse = await financeApi.searchTransactions(searchValue) as any;
+                    const searchResults = Array.isArray(searchResponse?.results)
+                        ? searchResponse.results
+                        : (searchResponse?.results || []);
+                    const sortedResults = sortTransactionsClientSide(searchResults, sortOption);
+                    setTransactions(sortedResults);
+                    setTotalCount(searchResponse?.count || sortedResults.length);
                 } else {
-                    const { financeApi } = await import('@/lib/api');
-                    const response = await financeApi.get<any>('/transactions/?page_size=1000');
+                    let queryParams = `?page=${page}&page_size=${pageSize}`;
+
+                    if (filters?.account && filters.account !== 'all') {
+                        queryParams += `&account_id=${filters.account}`;
+                    }
+                    if (filters?.type && filters.type !== 'all') {
+                        queryParams += `&transaction_type=${filters.type}`;
+                    }
+                    if (filters?.dateFrom) {
+                        queryParams += `&from_date=${filters.dateFrom}`;
+                    }
+                    if (filters?.dateTo) {
+                        queryParams += `&to_date=${filters.dateTo}`;
+                    }
+
+                    const ordering = TRANSACTION_ORDERING_MAP[sortOption] || '-time';
+                    queryParams += `&ordering=${ordering}`;
+
+                    const response = await financeApi.get<any>(`/transactions/${queryParams}`);
+
                     const transactionsData = Array.isArray(response) ? response : (response.results || []);
-                    setTransactions(transactionsData);
+                    const sortedTransactions = sortTransactionsClientSide(transactionsData, sortOption);
+                    setTransactions(sortedTransactions);
+                    setTotalCount(response.count || sortedTransactions.length);
                 }
             } catch (err: any) {
+                console.error("Error fetching transactions:", err);
                 setError(err.message);
+                setTransactions([]);
+                setTotalCount(0);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchTransactions();
-    }, [searchTerm]);
+        if (searchValue) {
+            const timer = setTimeout(fetchTransactions, 300);
+            return () => clearTimeout(timer);
+        } else {
+            fetchTransactions();
+        }
+    }, [page, pageSize, filters?.account, filters?.type, filters?.dateFrom, filters?.dateTo, filters?.search, filters?.sort, refreshTrigger]);
 
-    return { transactions, loading, error };
+    return { transactions, totalCount, loading, error, refresh };
 }
 
 /**
@@ -241,7 +327,7 @@ export function useOptimizedVendors(searchTerm = '') {
                 const { purchaseApi } = await import('@/lib/api');
                 // Use Typesense search if searchTerm is provided, otherwise fetch all
                 if (searchTerm && searchTerm.trim()) {
-                    const searchResponse = await purchaseApi.vendors.search(searchTerm);
+                    const searchResponse = await purchaseApi.vendors.search(searchTerm) as any;
                     setVendors(searchResponse.results || []);
                 } else {
                     const response = await purchaseApi.vendors.list();
@@ -276,10 +362,10 @@ export function useOptimizedPurchaseBills(searchTerm = '') {
                 const { purchaseApi } = await import('@/lib/api');
                 // Use Typesense search if searchTerm is provided, otherwise fetch all
                 if (searchTerm && searchTerm.trim()) {
-                    const searchResponse = await purchaseApi.bills.search(searchTerm);
+                    const searchResponse = await purchaseApi.bills.search(searchTerm) as any;
                     setBills(searchResponse.results || []);
                 } else {
-                    const response = await purchaseApi.bills.list();
+                    const response = await purchaseApi.bills.list() as any;
                     const billsData = Array.isArray(response) ? response : (response.results || []);
                     setBills(billsData);
                 }
@@ -312,7 +398,7 @@ export function useOptimizedWorkOrders(page = 1, pageSize = 20, searchTerm = '')
                 // Use Typesense search if searchTerm is provided, otherwise use paginated list
                 if (searchTerm && searchTerm.trim()) {
                     const { workOrdersApi } = await import('@/lib/api');
-                    const searchResponse = await workOrdersApi.search(searchTerm);
+                    const searchResponse = await workOrdersApi.search(searchTerm) as any;
                     setWorkOrders(searchResponse.results || []);
                     setTotalCount(searchResponse.count || 0);
                 } else {
@@ -396,7 +482,7 @@ export function useOptimizedAllFeatureData() {
                     api.get<any>('/feature-types/?page_size=1000'),
                     api.get<any>('/feature-images/?page_size=1000'),
                 ]);
-                
+
                 // Extract results from paginated response or use array directly
                 const prices = Array.isArray(pricesRes) ? pricesRes : (pricesRes.results || []);
                 const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
@@ -466,7 +552,7 @@ export function useOptimizedFeatureCategoriesPageData() {
                     api.get<any>('/feature-categories/?page_size=1000'),
                     api.get<any>('/vehicle-types/?page_size=1000'),
                 ]);
-                
+
                 // Extract results from paginated response or use array directly
                 const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
                 const vehicleTypes = Array.isArray(vehicleTypesRes) ? vehicleTypesRes : (vehicleTypesRes.results || []);
@@ -537,7 +623,7 @@ export function useOptimizedFeatureTypesPageData() {
                     api.get<any>('/feature-categories/?page_size=1000'),
                     api.get<any>('/vehicle-models/?page_size=1000'),
                 ]);
-                
+
                 // Extract results from paginated response or use array directly
                 const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
                 const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
@@ -692,7 +778,7 @@ export function useOptimizedVehicleModelsPageData() {
                     api.get<any>('/vehicle-makers/?page_size=1000'),
                     api.get<any>('/vehicle-types/?page_size=1000'),
                 ]);
-                
+
                 // Extract results from paginated response or use array directly
                 const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
                 const makers = Array.isArray(makersRes) ? makersRes : (makersRes.results || []);

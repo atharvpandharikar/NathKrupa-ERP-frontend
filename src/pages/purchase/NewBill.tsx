@@ -159,18 +159,19 @@ export default function NewBill() {
                 setLoading(true);
 
                 // Fetch vendors - handle pagination
-                const vendorsResponse = await purchaseApi.vendors.list();
+                const vendorsResponse: any = await purchaseApi.vendors.list();
                 // Extract results from paginated response or use array directly
-                const vendorsData = Array.isArray(vendorsResponse) ? vendorsResponse : (vendorsResponse.results || []);
+                const vendorsData = Array.isArray(vendorsResponse) ? vendorsResponse : (vendorsResponse?.results || []);
                 setVendors(vendorsData);
 
-                // Fetch products
-                const productsResponse = await shopProductsApi.list({ ordering: '-id' });
+                // Fetch initial products (limit to 50 for speed)
+                // We'll rely on search for finding older products
+                const productsResponse = await shopProductsApi.list({ ordering: '-id', limit: 50 });
                 setProducts(Array.isArray(productsResponse) ? productsResponse : []);
-                
+
                 // Fetch units from inventory API
                 try {
-                    const unitsResponse = await inventoryApiFunctions.units.list();
+                    const unitsResponse: any = await inventoryApiFunctions.units.list();
                     if (Array.isArray(unitsResponse)) {
                         setUnits(unitsResponse);
                         console.log(`✅ Loaded ${unitsResponse.length} units from inventory API`);
@@ -196,6 +197,35 @@ export default function NewBill() {
         };
 
         fetchData();
+    }, []);
+
+    // Server-side search handler
+    const handleProductSearch = useCallback(async (query: string) => {
+        if (!query || query.length < 2) return;
+
+        try {
+            console.log('🔍 Searching products:', query);
+            const response = await shopProductsApi.searchTypesense(query, { limit: 20 });
+
+            if (response && response.data && Array.isArray(response.data)) {
+                const newProducts = response.data as ShopProduct[];
+
+                setProducts(prevProducts => {
+                    // Create a map of existing products by ID for fast lookup
+                    const existingIds = new Set(prevProducts.map(p => p.product_id));
+
+                    // Filter out duplicates
+                    const uniqueNewProducts = newProducts.filter(p => !existingIds.has(p.product_id));
+
+                    if (uniqueNewProducts.length === 0) return prevProducts;
+
+                    console.log(`✅ Added ${uniqueNewProducts.length} products from search`);
+                    return [...prevProducts, ...uniqueNewProducts];
+                });
+            }
+        } catch (error) {
+            console.error('❌ Product search failed:', error);
+        }
     }, []);
 
     const calculateItemTotal = (item: BillItem) => {
@@ -255,7 +285,7 @@ export default function NewBill() {
                 newItems[index].product = selectedProduct;
                 // Auto-detect GST% from product's taxes field, default to 18% if not available
                 newItems[index].gst_percent = selectedProduct.taxes ?? 18;
-                
+
                 // Set unit from product if available
                 const productUnit = (selectedProduct as any).unit;
                 if (productUnit) {
@@ -279,7 +309,7 @@ export default function NewBill() {
                 }
             }
         }
-        
+
         // If unit is changed
         if (field === 'unit_id') {
             const selectedUnit = units.find(u => u.id === value);
@@ -602,6 +632,7 @@ export default function NewBill() {
                                                     emptyMessage="No products available"
                                                     searchPlaceholder="Search products..."
                                                     allowClear={false}
+                                                    onSearch={handleProductSearch}
                                                 />
                                             </TableCell>
                                             <TableCell>

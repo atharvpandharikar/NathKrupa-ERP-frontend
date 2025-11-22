@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,9 @@ import {
     FileSpreadsheet,
     FileText,
     Loader2,
-    History
+    History,
+    ChevronLeft,
+    ChevronRight
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { financeApi, purchaseApi } from "@/lib/api";
@@ -83,17 +85,34 @@ export default function Transactions() {
     const { toast } = useToast();
     const { trackJob } = useExportNotifications();
     const [searchTerm, setSearchTerm] = useState("");
-    const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [vendors, setVendors] = useState<Vendor[]>([]);
+    const [vendorsLoading, setVendorsLoading] = useState(false);
+    const [vendorsLoaded, setVendorsLoaded] = useState(false);
+    const [vendorsError, setVendorsError] = useState<string | null>(null);
     const [selectedAccount, setSelectedAccount] = useState<string>("all");
     const [selectedType, setSelectedType] = useState<string>("all");
     const [sortBy, setSortBy] = useState<string>("newest");
     const [dateFrom, setDateFrom] = useState<string>("");
     const [dateTo, setDateTo] = useState<string>("");
     const searchInputRef = useRef<HTMLInputElement>(null);
-    
-    const { transactions, loading, error: transactionsError } = useOptimizedTransactions(searchTerm);
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
+
+    const { transactions, totalCount, loading, error: transactionsError, refresh } = useOptimizedTransactions(
+        currentPage,
+        pageSize,
+        {
+            search: searchTerm,
+            account: selectedAccount,
+            type: selectedType,
+            dateFrom: dateFrom,
+            dateTo: dateTo,
+            sort: sortBy
+        }
+    );
+    const [displayedTransactions, setDisplayedTransactions] = useState<Transaction[]>([]);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -112,6 +131,7 @@ export default function Transactions() {
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [useCustomVendor, setUseCustomVendor] = useState(false);
+    const transactionType = formData.transaction_type;
 
     // Export related state
     const [showExportDialog, setShowExportDialog] = useState(false);
@@ -123,17 +143,26 @@ export default function Transactions() {
     const [currentExportJob, setCurrentExportJob] = useState<ExportJob | null>(null);
 
     useEffect(() => {
-        fetchAccounts();
-        fetchVendors();
-    }, []);
+        setDisplayedTransactions(transactions);
+    }, [transactions]);
+
+
+    // Client-side filtering is removed in favor of server-side filtering via the hook
+    useEffect(() => {
+        // Reset to page 1 when filters change
+        setCurrentPage(1);
+    }, [searchTerm, selectedAccount, selectedType, dateFrom, dateTo, sortBy]);
 
     useEffect(() => {
-        filterTransactions();
+        setCurrentPage(1);
+    }, [pageSize]);
+
+    useEffect(() => {
         // Restore focus to input if it was focused before
         if (searchInputRef.current && document.activeElement === document.body) {
             setTimeout(() => searchInputRef.current?.focus(), 0);
         }
-    }, [transactions, selectedAccount, selectedType, sortBy, dateFrom, dateTo]);
+    }, [transactions]);
 
     // Handle /new route by opening the create dialog
     useEffect(() => {
@@ -143,7 +172,7 @@ export default function Transactions() {
     }, [location.pathname]);
 
 
-    const fetchAccounts = async () => {
+    const fetchAccounts = useCallback(async () => {
         try {
             // Handle pagination - accounts API returns paginated response
             const response = await financeApi.get<any>('/accounts/?page_size=1000');
@@ -153,72 +182,73 @@ export default function Transactions() {
         } catch (error) {
             console.error('Error fetching accounts:', error);
         }
-    };
+    }, []);
 
-    const fetchVendors = async () => {
+    const fetchVendors = useCallback(async () => {
+        if (vendorsLoading) {
+            return;
+        }
+        setVendorsLoading(true);
+        setVendorsError(null);
         try {
             // Use the actual purchase API to fetch vendors - handle pagination
-            const response = await purchaseApi.vendors.list();
+            const response = await purchaseApi.vendors.list() as any;
             // Extract results from paginated response or use array directly
             const vendorsData = Array.isArray(response) ? response : (response.results || []);
             setVendors(vendorsData);
+            setVendorsLoaded(true);
         } catch (error) {
             console.error('Error fetching vendors:', error);
-            // Fallback to empty array if API fails
             setVendors([]);
+            setVendorsError('Unable to load vendor list. Please try again.');
+            setVendorsLoaded(false);
+        } finally {
+            setVendorsLoading(false);
+        }
+    }, [vendorsLoading]);
+
+    useEffect(() => {
+        fetchAccounts();
+    }, [fetchAccounts]);
+
+    useEffect(() => {
+        if (isCreateDialogOpen && transactionType === 'Debit' && !vendorsLoaded) {
+            fetchVendors();
+        }
+    }, [isCreateDialogOpen, transactionType, vendorsLoaded, fetchVendors]);
+
+    const filteredTransactions = displayedTransactions;
+    const totalPages = Math.max(1, totalCount ? Math.ceil(totalCount / pageSize) : 1);
+    const currentRangeStart = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const currentRangeEnd = totalCount === 0
+        ? 0
+        : Math.max(currentRangeStart, currentRangeStart + filteredTransactions.length - 1);
+    const canGoPrevious = currentPage > 1;
+    const canGoNext = currentPage < totalPages;
+
+    useEffect(() => {
+        if (!loading && totalCount > 0 && filteredTransactions.length === 0 && currentPage > 1) {
+            setCurrentPage(prev => Math.max(1, prev - 1));
+        }
+    }, [loading, totalCount, filteredTransactions.length, currentPage]);
+
+    const handlePrevPage = () => {
+        if (canGoPrevious) {
+            setCurrentPage(prev => prev - 1);
         }
     };
 
-    const filterTransactions = () => {
-        // Ensure transactions is always an array (handle paginated responses)
-        const transactionsArray = Array.isArray(transactions) ? transactions : (transactions?.results || []);
-        let filtered = transactionsArray;
-
-        // Search is now handled by backend Typesense - no client-side filtering needed
-
-        // Filter by account
-        if (selectedAccount !== "all") {
-            filtered = filtered.filter(transaction => transaction.account === parseInt(selectedAccount));
+    const handleNextPage = () => {
+        if (canGoNext) {
+            setCurrentPage(prev => prev + 1);
         }
+    };
 
-        // Filter by transaction type
-        if (selectedType !== "all") {
-            filtered = filtered.filter(transaction => transaction.transaction_type === selectedType);
+    const handlePageSizeChange = (value: string) => {
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+            setPageSize(parsed);
         }
-
-        // Filter by date range
-        if (dateFrom) {
-            filtered = filtered.filter(transaction =>
-                new Date(transaction.time) >= new Date(dateFrom)
-            );
-        }
-
-        if (dateTo) {
-            filtered = filtered.filter(transaction =>
-                new Date(transaction.time) <= new Date(dateTo + 'T23:59:59')
-            );
-        }
-
-        // Sort transactions
-        filtered.sort((a, b) => {
-            const dateA = new Date(a.time);
-            const dateB = new Date(b.time);
-
-            switch (sortBy) {
-                case 'newest':
-                    return dateB.getTime() - dateA.getTime(); // Newest first
-                case 'oldest':
-                    return dateA.getTime() - dateB.getTime(); // Oldest first
-                case 'amount_high':
-                    return b.amount - a.amount; // Highest amount first
-                case 'amount_low':
-                    return a.amount - b.amount; // Lowest amount first
-                default:
-                    return dateB.getTime() - dateA.getTime(); // Default: newest first
-            }
-        });
-
-        setFilteredTransactions(filtered);
     };
 
     const formatCurrency = (amount: number) => {
@@ -246,15 +276,35 @@ export default function Transactions() {
         });
     };
 
+    const enhanceTransaction = useCallback((transaction: Transaction): Transaction => {
+        const accountInfo = accounts.find(account => account.id === transaction.account);
+        const vendorInfo = transaction.vendor ? vendors.find(vendor => vendor.id === transaction.vendor) : undefined;
+
+        return {
+            ...transaction,
+            account_nickname: transaction.account_nickname || accountInfo?.nickname || accountInfo?.account_name || transaction.account_nickname,
+            vendor_name: transaction.vendor_name || vendorInfo?.name || transaction.to_party || transaction.vendor_name,
+        };
+    }, [accounts, vendors]);
+
     const handleDelete = async (transactionId: number) => {
-        if (window.confirm('Are you sure you want to delete this transaction?')) {
-            try {
-                await financeApi.del(`/transactions/${transactionId}/`);
-                toast({ title: 'Success', description: 'Transaction deleted successfully' });
-            } catch (error) {
-                console.error('Error deleting transaction:', error);
-                toast({ title: 'Error', description: 'Failed to delete transaction', variant: 'destructive' });
+        if (!window.confirm('Are you sure you want to delete this transaction?')) {
+            return;
+        }
+
+        try {
+            await financeApi.del(`/transactions/${transactionId}/`);
+            toast({ title: 'Success', description: 'Transaction deleted successfully' });
+            setDisplayedTransactions(prev => prev.filter(transaction => transaction.id !== transactionId));
+
+            if (filteredTransactions.length <= 1 && currentPage > 1) {
+                setCurrentPage(prev => Math.max(1, prev - 1));
+            } else {
+                refresh();
             }
+        } catch (error) {
+            console.error('Error deleting transaction:', error);
+            toast({ title: 'Error', description: 'Failed to delete transaction', variant: 'destructive' });
         }
     };
 
@@ -305,6 +355,16 @@ export default function Transactions() {
             const newTransaction = await financeApi.createTransactionWithImage(transactionData, selectedImage || undefined);
             setIsCreateDialogOpen(false);
             toast({ title: 'Success', description: 'Transaction created successfully' });
+            const hydratedTransaction = enhanceTransaction(newTransaction);
+            setDisplayedTransactions(prev => {
+                const withoutDuplicate = prev.filter(transaction => transaction.id !== hydratedTransaction.id);
+                return [hydratedTransaction, ...withoutDuplicate].slice(0, pageSize);
+            });
+            const shouldRefreshImmediately = currentPage === 1;
+            setCurrentPage(1);
+            if (shouldRefreshImmediately) {
+                refresh();
+            }
             setFormData({
                 account: "",
                 transaction_type: "Credit",
@@ -483,19 +543,6 @@ export default function Transactions() {
 
         return unsubscribe;
     }, [currentExportJob]);
-
-
-    if (loading) {
-        return (
-            <div className="p-6">
-                <div className="text-center">
-                    <div className="text-lg font-semibold">Loading...</div>
-                    <div className="text-sm text-muted-foreground mt-2">Please wait while we load the transactions</div>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="p-6 space-y-6">
             {/* Header */}
@@ -655,6 +702,21 @@ export default function Transactions() {
                                                     searchPlaceholder="Search vendors..."
                                                     emptyText="No vendors found"
                                                 />
+                                            )}
+                                            {!useCustomVendor && vendorsLoading && (
+                                                <p className="text-xs text-muted-foreground">Loading vendors...</p>
+                                            )}
+                                            {vendorsError && (
+                                                <div className="mt-1 flex items-center gap-2 text-xs text-red-600">
+                                                    <span>{vendorsError}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => fetchVendors()}
+                                                        className="text-blue-600 hover:underline"
+                                                    >
+                                                        Retry
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -840,6 +902,12 @@ export default function Transactions() {
                     <CardTitle>All Transactions</CardTitle>
                 </CardHeader>
                 <CardContent>
+                    {transactionsError && (
+                        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                            <p className="font-medium">Unable to load transactions.</p>
+                            <p className="mt-1">{transactionsError}</p>
+                        </div>
+                    )}
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -945,11 +1013,54 @@ export default function Transactions() {
                         </TableBody>
                     </Table>
 
-                    {filteredTransactions.length === 0 && (
+                    {loading && (
+                        <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Loading transactions...
+                        </div>
+                    )}
+
+                    {!loading && filteredTransactions.length === 0 && (
                         <div className="text-center py-8">
                             <p className="text-muted-foreground">No transactions found</p>
                         </div>
                     )}
+
+                    <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="text-sm text-muted-foreground">
+                            {totalCount === 0
+                                ? 'No transactions to display'
+                                : `Showing ${currentRangeStart}-${currentRangeEnd} of ${totalCount} transactions`}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="transactions-page-size" className="text-sm">
+                                Rows per page
+                            </Label>
+                            <Select value={pageSize.toString()} onValueChange={handlePageSizeChange}>
+                                <SelectTrigger id="transactions-page-size" className="w-24">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent align="end">
+                                    <SelectItem value="25">25</SelectItem>
+                                    <SelectItem value="50">50</SelectItem>
+                                    <SelectItem value="100">100</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" onClick={handlePrevPage} disabled={!canGoPrevious}>
+                                <ChevronLeft className="mr-1 h-4 w-4" />
+                                Previous
+                            </Button>
+                            <span className="text-sm text-muted-foreground">
+                                Page {totalCount === 0 ? 0 : currentPage} of {totalCount === 0 ? 0 : totalPages}
+                            </span>
+                            <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!canGoNext}>
+                                Next
+                                <ChevronRight className="ml-1 h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 

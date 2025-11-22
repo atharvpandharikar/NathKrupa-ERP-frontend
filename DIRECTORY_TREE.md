@@ -2,12 +2,11 @@
 
 ## manufacturing-nathkrupa-frontend
 
-**Generated:** 2025-11-14 17:24:52
+**Generated:** 2025-11-22 13:30:39
 
 ---
 
-```text
-Folder PATH listing for volume Tejas
+`	extFolder PATH listing for volume Tejas
 Volume serial number is 527A-5FD1
 E:.
 |   .amplify-app.json
@@ -16,6 +15,7 @@ E:.
 |   .vercelignore
 |   bun.lockb
 |   components.json
+|   DIRECTORY_TREE.md
 |   directory_tree.txt
 |   eslint.config.js
 |   index.html
@@ -28,6 +28,10 @@ E:.
 |   tsconfig.node.json
 |   vite.config.ts
 |   
++---.cursor
+|   \---rules
+|           directory-tree-update.mdc
+|           
 +---.vscode
 |       c_cpp_properties.json
 |       settings.json
@@ -532,20 +536,20 @@ E:.
 |   |           chunk-7PTYRYYQ.js.map
 |   |           chunk-AWOX6SER.js
 |   |           chunk-AWOX6SER.js.map
+|   |           chunk-DQFTIUXS.js
+|   |           chunk-DQFTIUXS.js.map
 |   |           chunk-DWM4GXJY.js
 |   |           chunk-DWM4GXJY.js.map
 |   |           chunk-E7TSFT4J.js
 |   |           chunk-E7TSFT4J.js.map
-|   |           chunk-EJS3CDOM.js
-|   |           chunk-EJS3CDOM.js.map
 |   |           chunk-FZ2NCY42.js
 |   |           chunk-FZ2NCY42.js.map
 |   |           chunk-G7KMZA27.js
 |   |           chunk-G7KMZA27.js.map
-|   |           chunk-HEMWQYWE.js
-|   |           chunk-HEMWQYWE.js.map
 |   |           chunk-HLTI34QQ.js
 |   |           chunk-HLTI34QQ.js.map
+|   |           chunk-JXQKAIZT.js
+|   |           chunk-JXQKAIZT.js.map
 |   |           chunk-KBTYAULA.js
 |   |           chunk-KBTYAULA.js.map
 |   |           chunk-KCFVMCIE.js
@@ -30467,7 +30471,7 @@ E:.
     |       api.ts
     |       cache.ts
     |       optimized-shop-api.ts
-    |       performance.ts
+    |       performance.tsx
     |       shop-api.ts
     |       title.ts
     |       utils.ts
@@ -30597,8 +30601,7 @@ E:.
     |       quote.ts
     |       
     \---utils
-            formatters.ts
-```
+            formatters.ts`
 
 ---
 
