@@ -36,7 +36,8 @@ import {
     List,
     X
 } from 'lucide-react';
-import { optimizedShopApi, ShopCategory } from '@/lib/optimized-shop-api';
+import { optimizedShopApi } from '@/lib/optimized-shop-api';
+import type { ShopCategory } from '@/lib/optimized-shop-api';
 import { SHOP_API_ROOT, authHeaders } from '@/lib/shop-api';
 
 // Memoized image component for better performance
@@ -332,7 +333,7 @@ export default function OptimizedCategoryList() {
                     result = await optimizedShopApi.categories.create({
                         title: form.title.trim(),
                         ref_name: form.ref_name.trim(),
-                        parent: form.parent_id ? parseInt(form.parent_id) || form.parent_id : undefined
+                        parent: form.parent_id ? (parseInt(form.parent_id as string) || form.parent_id) as any : undefined
                     });
                 }
             } else {

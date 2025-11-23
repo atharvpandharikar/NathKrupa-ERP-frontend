@@ -141,7 +141,7 @@ export default function VendorPrices() {
                 params.search = searchTerm;
             }
 
-            const response = await purchaseApi.vendorProductPrices.list(params);
+            const response = await purchaseApi.vendorProductPrices.list(params) as any;
             
             // Handle paginated response structure
             if (response && typeof response === 'object' && 'results' in response) {

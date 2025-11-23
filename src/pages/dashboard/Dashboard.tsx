@@ -20,7 +20,7 @@ export default function Dashboard() {
     queryKey: ['dashboard-stats'], 
     queryFn: () => dashboardApi.stats(),
     staleTime: 60000, // Consider data fresh for 1 minute
-    cacheTime: 300000, // Keep in cache for 5 minutes
+    gcTime: 300000, // Keep in cache for 5 minutes
   });
 
   // For charts, we still need some work order data, but we'll fetch only recent ones
@@ -29,10 +29,10 @@ export default function Dashboard() {
     queryKey: ['dashboard-bills-recent'], 
     queryFn: () => workOrdersApi.list(), // Will be paginated (50 items max)
     staleTime: 60000,
-    cacheTime: 300000,
+    gcTime: 300000,
   });
 
-  const bills: Bill[] = Array.isArray(billsData) ? billsData.slice(0, 50) : (billsData?.results?.slice(0, 50) || []);
+  const bills: Bill[] = Array.isArray(billsData) ? billsData.slice(0, 50) : ((billsData as any)?.results?.slice(0, 50) || []);
 
   // KPI calculations - use dashboard stats when available, fallback to bills data
   const totalRevenue = dashboardStats?.monthly_revenue || bills.reduce((s, b) => s + Number(b.quoted_price || 0) + Number(b.total_added_features_cost || 0), 0);

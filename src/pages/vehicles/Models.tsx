@@ -40,7 +40,7 @@ export default function VehicleModelsPage() {
 
   useEffect(() => {
     if (items) {
-      setItems(items);
+      setItems(items as VehicleModel[]);
     }
   }, [items]);
 

@@ -92,7 +92,7 @@ export default function Transactions() {
     const [vendorsError, setVendorsError] = useState<string | null>(null);
     const [selectedAccount, setSelectedAccount] = useState<string>("all");
     const [selectedType, setSelectedType] = useState<string>("all");
-    const [sortBy, setSortBy] = useState<string>("newest");
+    const [sortBy, setSortBy] = useState<"newest" | "oldest" | "amount_high" | "amount_low">("newest");
     const [dateFrom, setDateFrom] = useState<string>("");
     const [dateTo, setDateTo] = useState<string>("");
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -850,7 +850,7 @@ export default function Transactions() {
 
                             <div className="flex flex-col">
                                 <label className="text-xs text-muted-foreground mb-1">Sort</label>
-                                <Select value={sortBy} onValueChange={setSortBy}>
+                                <Select value={sortBy} onValueChange={(val) => setSortBy(val as "newest" | "oldest" | "amount_high" | "amount_low")}>
                                     <SelectTrigger className="h-9">
                                         <SelectValue placeholder="Newest First" />
                                     </SelectTrigger>

@@ -289,7 +289,12 @@ function RackForm({ rack, warehouses, onSubmit, onCancel, isLoading }: RackFormP
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSubmit(formData);
+        const submitData: any = {
+            ...formData,
+            row_count: typeof formData.row_count === 'string' ? parseInt(formData.row_count) || 0 : formData.row_count,
+            column_count: typeof formData.column_count === 'string' ? parseInt(formData.column_count) || 0 : formData.column_count,
+        };
+        onSubmit(submitData);
     };
 
     return (

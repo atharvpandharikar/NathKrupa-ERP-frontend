@@ -144,8 +144,8 @@ export default function CustomerPrices() {
 
         try {
             await customerProductPricesApi.update(selectedPrice.id, {
-                selling_price: editForm.selling_price ? parseFloat(editForm.selling_price) : undefined,
-                discount_percentage: editForm.discount_percentage ? parseFloat(editForm.discount_percentage) : undefined,
+                selling_price: editForm.selling_price ? String(parseFloat(editForm.selling_price)) : undefined,
+                discount_percentage: editForm.discount_percentage ? String(parseFloat(editForm.discount_percentage)) : undefined,
                 is_active: editForm.is_active,
                 notes: editForm.notes,
             });
@@ -180,8 +180,8 @@ export default function CustomerPrices() {
             await customerProductPricesApi.create({
                 customer: selectedCustomerForAdd,
                 product: selectedProductForAdd,
-                selling_price: editForm.selling_price ? parseFloat(editForm.selling_price) : undefined,
-                discount_percentage: editForm.discount_percentage ? parseFloat(editForm.discount_percentage) : undefined,
+                selling_price: editForm.selling_price ? String(parseFloat(editForm.selling_price)) : undefined,
+                discount_percentage: editForm.discount_percentage ? String(parseFloat(editForm.discount_percentage)) : undefined,
                 is_active: editForm.is_active,
                 notes: editForm.notes,
             });
@@ -238,7 +238,7 @@ export default function CustomerPrices() {
                 discount_percentage: priceData.discount_percentage,
                 is_active: priceData.is_active,
                 notes: priceData.notes,
-                price_tiers: updatedTiers,
+                price_tiers: updatedTiers as any,
             });
 
             toast.success('Price tier added successfully');

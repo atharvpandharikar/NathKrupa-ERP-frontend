@@ -331,7 +331,7 @@ export function useOptimizedVendors(searchTerm = '') {
                     setVendors(searchResponse.results || []);
                 } else {
                     const response = await purchaseApi.vendors.list();
-                    const vendorsData = Array.isArray(response) ? response : (response.results || []);
+                    const vendorsData = Array.isArray(response) ? response : ((response as any)?.results || []);
                     setVendors(vendorsData);
                 }
             } catch (err: any) {

@@ -553,7 +553,7 @@ export default function VendorDetail() {
                                 <div className="text-right">
                                     <div className="font-medium">{formatCurrency(bill.amount)}</div>
                                     <div className="text-xs text-muted-foreground">
-                                        {bill.status === 'outstanding' || bill.status === 'pending' ? 'Pending' : bill.status}
+                                        {bill.status === 'outstanding' || (bill.status as any) === 'pending' ? 'Pending' : bill.status}
                                     </div>
                                 </div>
                                 <Button

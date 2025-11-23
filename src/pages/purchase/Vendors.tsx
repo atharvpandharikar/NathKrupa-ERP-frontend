@@ -132,7 +132,7 @@ export default function Vendors() {
                 const response = await purchaseApi.vendors.list();
                 
                 // Handle pagination - extract results from paginated response or use array directly
-                const vendorsArray = Array.isArray(response) ? response : (response.results || []);
+                const vendorsArray = Array.isArray(response) ? response : ((response as any).results || []);
 
                 // Fetch payment summary for each vendor
                 const vendorsWithStats = await Promise.all(
@@ -187,7 +187,7 @@ export default function Vendors() {
             try {
                 const response = await purchaseApi.vendors.list();
                 // Handle pagination - extract results from paginated response or use array directly
-                const vendorsData = Array.isArray(response) ? response : (response.results || []);
+                const vendorsData = Array.isArray(response) ? response : ((response as any).results || []);
                 setVendorsList(vendorsData);
             } catch (error) {
                 console.error('Error fetching vendors:', error);
@@ -440,7 +440,7 @@ export default function Vendors() {
             // Refresh vendors list with stats
             const response = await purchaseApi.vendors.list();
             // Handle pagination - extract results from paginated response or use array directly
-            const vendorsArray = Array.isArray(response) ? response : (response.results || []);
+            const vendorsArray = Array.isArray(response) ? response : ((response as any).results || []);
             const vendorsWithStats = await Promise.all(
                 vendorsArray.map(async (vendor) => {
                     try {
@@ -597,7 +597,7 @@ export default function Vendors() {
             // Step 3: Refresh vendors list
             const response = await purchaseApi.vendors.list();
             // Handle pagination - extract results from paginated response or use array directly
-            const vendorsArray = Array.isArray(response) ? response : (response.results || []);
+            const vendorsArray = Array.isArray(response) ? response : ((response as any).results || []);
             const vendorsWithStats = await Promise.all(
                 vendorsArray.map(async (vendor) => {
                     try {
