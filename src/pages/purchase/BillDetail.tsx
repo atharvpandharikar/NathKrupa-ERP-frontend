@@ -123,7 +123,7 @@ export default function BillDetail() {
                 // Handle pagination - vendors API returns paginated response
                 const response = await purchaseApi.vendors.list();
                 // Extract results from paginated response or use array directly
-                const vendorsData = Array.isArray(response) ? response : (response.results || []);
+                const vendorsData = Array.isArray(response) ? response : ((response as any).results || []);
                 setVendors(vendorsData);
             } catch (error) {
                 console.error('Error fetching vendors:', error);

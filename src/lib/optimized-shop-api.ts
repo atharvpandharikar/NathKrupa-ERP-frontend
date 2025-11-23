@@ -2,6 +2,9 @@
 import { shopApi, ShopCategory, ShopBrand, CarMaker, ShopProduct, CarModel, CarVariant, shopCategoriesApi } from './shop-api';
 import { dataCache, CACHE_KEYS, cacheHelpers } from './cache';
 
+// Re-export types
+export type { ShopCategory, ShopBrand, CarMaker, ShopProduct, CarModel, CarVariant };
+
 // Optimized API functions with caching
 export const optimizedShopApi = {
     // Categories with smart caching

@@ -45,7 +45,7 @@ export default function FeatureTypesPage() {
 
   useEffect(() => {
     if (items) {
-      setItems(items);
+      setItems(items as FeatureType[]);
     }
   }, [items]);
 

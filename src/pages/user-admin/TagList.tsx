@@ -153,10 +153,10 @@ export default function TagList() {
                                 <div className="flex items-center gap-2">
                                     <div
                                         className="w-6 h-6 rounded-full border-2 border-gray-200"
-                                        style={{ backgroundColor: tag.color || '#6B7280' }}
+                                        style={{ backgroundColor: (tag as any).color || '#6B7280' }}
                                     ></div>
                                     <span className="text-sm text-gray-600">
-                                        {tag.color || '#6B7280'}
+                                        {(tag as any).color || '#6B7280'}
                                     </span>
                                 </div>
 
@@ -249,7 +249,7 @@ export default function TagList() {
                 <Card>
                     <CardContent className="p-4">
                         <div className="text-2xl font-bold text-purple-600">
-                            {tags.filter(t => t.color).length}
+                            {tags.filter(t => (t as any).color).length}
                         </div>
                         <div className="text-sm text-gray-600">With Colors</div>
                     </CardContent>

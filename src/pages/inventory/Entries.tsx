@@ -119,9 +119,9 @@ export default function InventoryEntries() {
 
     // Filter entries based on search term
     const filteredEntries = entries.filter(entry =>
-        entry.product_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (entry as any).product_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         entry.location_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        entry.warehouse_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        (entry as any).warehouse_name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const handleCreateEntry = (data: Partial<InventoryEntry>) => {
@@ -163,22 +163,22 @@ export default function InventoryEntries() {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Package className="h-5 w-5" />
-                            {entry.product_title || 'Unknown Product'}
+                            {(entry as any).product_title || 'Unknown Product'}
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
                                 <label className="text-sm font-medium text-muted-foreground">Product ID</label>
-                                <p className="text-sm">{entry.product_id || 'N/A'}</p>
+                                <p className="text-sm">{entry.product || 'N/A'}</p>
                             </div>
                             <div>
                                 <label className="text-sm font-medium text-muted-foreground">Warehouse</label>
-                                <p className="text-sm">{entry.warehouse_name || 'Unknown'}</p>
+                                <p className="text-sm">{(entry as any).warehouse_name || 'Unknown'}</p>
                             </div>
                             <div>
                                 <label className="text-sm font-medium text-muted-foreground">Rack</label>
-                                <p className="text-sm">{entry.rack_number || 'Unknown'}</p>
+                                <p className="text-sm">{(entry as any).rack_number || 'Unknown'}</p>
                             </div>
                             <div>
                                 <label className="text-sm font-medium text-muted-foreground">Location</label>
@@ -197,7 +197,7 @@ export default function InventoryEntries() {
                             </div>
                             <div>
                                 <label className="text-sm font-medium text-muted-foreground">Quantity</label>
-                                <p className="text-sm font-medium">{entry.quantity} {entry.unit_code || 'units'}</p>
+                                <p className="text-sm font-medium">{entry.quantity} {(entry as any).unit_code || 'units'}</p>
                             </div>
                             <div>
                                 <label className="text-sm font-medium text-muted-foreground">Created</label>
@@ -301,7 +301,7 @@ export default function InventoryEntries() {
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <h3 className="font-medium">{entry.product_title || 'Unknown Product'}</h3>
+                                            <h3 className="font-medium">{(entry as any).product_title || 'Unknown Product'}</h3>
                                             {entry.product_variant && (
                                                 <Badge variant="outline" className="text-xs">
                                                     Variant
@@ -315,13 +315,13 @@ export default function InventoryEntries() {
                                                 <span>{entry.location_code}</span>
                                             </div>
                                             <div>
-                                                <span className="font-medium">{entry.quantity}</span> {entry.unit_code || 'units'}
+                                                <span className="font-medium">{entry.quantity}</span> {(entry as any).unit_code || 'units'}
                                             </div>
                                             <div>
-                                                Warehouse: {entry.warehouse_name || 'Unknown'}
+                                                Warehouse: {(entry as any).warehouse_name || 'Unknown'}
                                             </div>
                                             <div>
-                                                Rack: {entry.rack_number || 'Unknown'}
+                                                Rack: {(entry as any).rack_number || 'Unknown'}
                                             </div>
                                         </div>
 
@@ -423,9 +423,11 @@ function InventoryEntryForm({ entry, warehouses, units, onSubmit, onCancel, isLo
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const submitData = {
+        const submitData: any = {
             ...formData,
             unit: formData.unit ? parseInt(formData.unit) : undefined,
+            row: typeof formData.row === 'string' ? parseInt(formData.row) : formData.row,
+            column: typeof formData.column === 'string' ? parseInt(formData.column) : formData.column,
         };
         onSubmit(submitData);
     };
@@ -448,7 +450,7 @@ function InventoryEntryForm({ entry, warehouses, units, onSubmit, onCancel, isLo
                                     ...prev,
                                     product: product.product_id,
                                     // Set unit to product's default, or 'default' if none
-                                    unit: product.unit ? product.unit.toString() : 'default'
+                                    unit: (product as any).unit ? (product as any).unit.toString() : 'default'
                                 }));
                             } else {
                                 setFormData(prev => ({ ...prev, product: '', unit: 'default' }));

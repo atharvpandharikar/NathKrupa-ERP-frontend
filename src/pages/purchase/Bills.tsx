@@ -44,7 +44,7 @@ export default function Bills() {
         const fetchStats = async () => {
             try {
                 // Fetch dashboard stats only
-                const statsResponse = await purchaseApi.dashboardStats();
+                const statsResponse = await purchaseApi.dashboardStats() as any;
                 setDashboardStats({
                     total_bills: statsResponse.total_bills || 0,
                     total_amount: statsResponse.total_amount || 0,

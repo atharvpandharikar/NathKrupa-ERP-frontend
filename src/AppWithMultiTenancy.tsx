@@ -10,8 +10,6 @@ import { getTokens } from "@/lib/api";
 import { AuthProvider } from "@/context/AuthContext";
 import { SessionTimeoutNotification } from "@/components/SessionTimeoutNotification";
 import { TitleManager } from "@/components/TitleManager";
-import { OrganizationRouter } from "@/components/OrganizationRouter";
-import { OrganizationHeader } from "@/components/layout/OrganizationHeader";
 
 // Lazy route chunks for faster initial load
 const LazyMainLayout = React.lazy(() => import("./components/layout/MainLayout"));
@@ -85,13 +83,9 @@ const App: React.FC = () => {
             <TooltipProvider>
                 <BrowserRouter>
                     <AuthProvider>
-                        <OrganizationRouter>
-                            <div className="min-h-screen bg-gray-50">
-                                {/* Organization Header - shows current organization and switcher */}
-                                <OrganizationHeader />
-
-                                {/* Session timeout notification */}
-                                <SessionTimeoutNotification />
+                        <div className="min-h-screen bg-gray-50">
+                            {/* Session timeout notification */}
+                            <SessionTimeoutNotification />
 
                                 {/* Title manager for dynamic page titles */}
                                 <TitleManager />
@@ -191,10 +185,9 @@ const App: React.FC = () => {
 
                                         {/* Catch-all route */}
                                         <Route path="*" element={<NotFound />} />
-                                    </Routes>
-                                </React.Suspense>
-                            </div>
-                        </OrganizationRouter>
+                                </Routes>
+                            </React.Suspense>
+                        </div>
                     </AuthProvider>
                 </BrowserRouter>
 
