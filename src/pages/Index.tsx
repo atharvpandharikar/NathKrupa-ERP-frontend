@@ -16,10 +16,10 @@ const Index = () => {
           Streamlined quotations, billing and reports for vehicle manufacturing.
         </p>
         <div className="flex items-center justify-center gap-4">
-          <Link to="/dashboard" className="px-6 py-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90">
+          <Link to="/api/dashboard" className="px-6 py-3 rounded-md bg-primary text-primary-foreground hover:bg-primary/90">
             Go to Dashboard
           </Link>
-          <Link to="/quotations/generate" className="px-6 py-3 rounded-md border border-input bg-background hover:bg-accent">
+          <Link to="/api/quotations/generate" className="px-6 py-3 rounded-md border border-input bg-background hover:bg-accent">
             Generate Quotation
           </Link>
         </div>

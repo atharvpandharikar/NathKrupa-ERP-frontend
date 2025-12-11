@@ -48,15 +48,8 @@ export default function WorkOrderDetails() {
   // payments query removed - all payments now handled through finance app
 
   // Fetch finance transactions linked to this work order by work order number - handle pagination
-  const { data: allFinanceTransactions = [] } = useQuery({
-    queryKey: ["finance-transactions", workOrder?.work_order_number],
-    queryFn: async () => {
-      const response = await financeApi.get<any>(`/transactions/?bill_no=${workOrder?.work_order_number}&page_size=1000`);
-      // Extract results from paginated response or use array directly
-      return Array.isArray(response) ? response : (response.results || []);
-    },
-    enabled: !!workOrder?.work_order_number && !isLoading,
-  });
+  // Finance transactions API call removed as per request
+  const allFinanceTransactions: any[] = [];
 
   // Filter to only show payments from the specific customer for this work order
   const customerName = (workOrder?.quotation?.customer || workOrder?.work_order?.quotation?.customer)?.name;
