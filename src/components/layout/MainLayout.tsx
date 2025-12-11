@@ -1,6 +1,7 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarInset, SidebarFooter } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
+import { AppSidebarFooter } from "./AppSidebarFooter";
 import { Navbar } from "./Navbar";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -20,7 +21,7 @@ export default function MainLayout() {
       <div className="flex w-full min-h-screen">
         {!shouldHideSidebar && (
           <Sidebar collapsible="icon" variant="inset">
-            <SidebarContent className="overflow-visible">
+            <SidebarContent>
               <SidebarGroup>
                 <SidebarGroupLabel>
                   <button
@@ -41,7 +42,11 @@ export default function MainLayout() {
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
+
             </SidebarContent>
+            <SidebarFooter>
+              <AppSidebarFooter />
+            </SidebarFooter>
           </Sidebar>
         )}
 
