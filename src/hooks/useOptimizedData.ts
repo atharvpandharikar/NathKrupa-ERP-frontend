@@ -23,7 +23,7 @@ function setCachedData<T>(key: string, data: T): void {
     dataCache.set(key, { data, timestamp: Date.now() });
 }
 
-type TransactionSortOption = 'newest' | 'oldest' | 'amount_high' | 'amount_low';
+export type TransactionSortOption = 'newest' | 'oldest' | 'amount_high' | 'amount_low';
 
 const TRANSACTION_ORDERING_MAP: Record<TransactionSortOption, string> = {
     newest: '-time',
