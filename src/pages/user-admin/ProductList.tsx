@@ -240,7 +240,28 @@ export default function ProductList() {
             });
         },
     });
-
+    
+    // Update mutation for barcode generation
+    const updateMutation = useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<ShopProduct> }) => 
+            shopProductsApi.update(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            toast({
+                title: 'Barcode Generated',
+                description: 'A new barcode has been successfully generated and saved.',
+                variant: 'default',
+            });
+        },
+        onError: (error: any) => {
+            console.error('Error generating barcode:', error);
+            toast({
+                title: 'Generation Failed',
+                description: error?.message || 'Failed to generate barcode.',
+                variant: 'destructive',
+            });
+        },
+    });
     const handleEdit = (productId: string) => {
         navigate(`/user-admin/products/edit/${productId}`);
     };
@@ -724,7 +745,14 @@ export default function ProductList() {
                                                     {product.hsn_code || '-'}
                                                 </td>
                                                 <td className="px-2 py-2 text-xs text-gray-900 text-center">
-                                                    {product.barcode || '-'}
+                                                    {product.barcode || (
+                                                        <Badge 
+                                                            variant="outline" 
+                                                            className="cursor-pointer hover:bg-blue-200 bg-blue-50 text-blue-700 border-blue-200"
+                                                        >
+                                                            Generate
+                                                        </Badge>
+                                                    )}
                                                 </td>
                                                 <td className="px-2 py-2 text-xs text-gray-900 text-center">
                                                     <div className="flex flex-col items-center">

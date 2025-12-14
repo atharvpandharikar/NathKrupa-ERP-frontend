@@ -49,6 +49,7 @@ export default function WorkOrderDetails() {
 
   // Fetch finance transactions linked to this work order by work order number - handle pagination
   // Finance transactions API call removed as per request
+  // -----------
   const allFinanceTransactions: any[] = [];
 
   // Filter to only show payments from the specific customer for this work order
@@ -60,13 +61,14 @@ export default function WorkOrderDetails() {
   );
 
   // Debug logging
-  console.log('Work Order Debug:', {
-    workOrderNumber: workOrder?.work_order_number,
-    customerName,
-    allFinanceTransactions: allFinanceTransactions.length,
-    filteredTransactions: financeTransactions.length,
-    isLoading
-  });
+  // console.log('Work Order Debug:', {
+  //   workOrderNumber: workOrder?.work_order_number,
+  //   customerName,
+  //   allFinanceTransactions: allFinanceTransactions.length,
+  //   filteredTransactions: financeTransactions.length,
+  //   isLoading
+  // });
+  
 
   // filteredPayments logic removed - all payments now handled through finance app
   const { data: intake } = useQuery<VehicleIntake | undefined>({

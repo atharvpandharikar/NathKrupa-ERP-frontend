@@ -95,7 +95,7 @@ export default function FinanceDashboard() {
 
     useEffect(() => {
         fetchDashboardData();
-        fetchVendors();
+        // fetchVendors();
     }, []);
 
     const fetchDashboardData = async () => {
@@ -140,15 +140,15 @@ export default function FinanceDashboard() {
         }
     };
 
-    const fetchVendors = async () => {
-        try {
-            const data = await purchaseApi.vendors.list();
-            setVendors(data);
-        } catch (error) {
-            console.error('Error fetching vendors:', error);
-            setVendors([]);
-        }
-    };
+    // const fetchVendors = async () => {
+    //     try {
+    //         const data = await purchaseApi.vendors.list();
+    //         setVendors(data);
+    //     } catch (error) {
+    //         console.error('Error fetching vendors:', error);
+    //         setVendors([]);
+    //     }
+    // };
 
     const handleCreateTransaction = async (e: React.FormEvent) => {
         e.preventDefault();
