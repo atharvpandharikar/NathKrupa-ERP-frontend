@@ -266,6 +266,27 @@ export default function ProductList() {
         navigate(`/user-admin/products/edit/${productId}`);
     };
 
+    // Generate Barcode Mutation
+    const generateBarcodeMutation = useMutation({
+        mutationFn: (productId: string) => shopProductsApi.generateBarcode(productId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            toast({
+                title: 'Barcode Generated',
+                description: 'New barcode has been generated successfully.',
+                variant: 'default',
+            });
+        },
+        onError: (error: any) => {
+            console.error('Error generating barcode:', error);
+            toast({
+                title: 'Generation Failed',
+                description: error?.message || 'Failed to generate barcode. Please try again.',
+                variant: 'destructive',
+            });
+        },
+    });
+
     const handleDelete = async (productId: string) => {
         if (window.confirm('Are you sure you want to delete this product?')) {
             deleteMutation.mutate(productId);
@@ -745,12 +766,20 @@ export default function ProductList() {
                                                     {product.hsn_code || '-'}
                                                 </td>
                                                 <td className="px-2 py-2 text-xs text-gray-900 text-center">
-                                                    {product.barcode || (
+                                                    {product.barcode_number || product.barcode || (
                                                         <Badge 
                                                             variant="outline" 
-                                                            className="cursor-pointer hover:bg-blue-200 bg-blue-50 text-blue-700 border-blue-200"
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation(); // Prevent row click
+                                                                try {
+                                                                    await generateBarcodeMutation.mutateAsync(product.product_id);
+                                                                } catch (err) {
+                                                                    // Error handled in mutation
+                                                                }
+                                                            }}
+                                                            className={`cursor-pointer hover:bg-blue-200 bg-blue-50 text-blue-700 border-blue-200 ${generateBarcodeMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                         >
-                                                            Generate
+                                                            {generateBarcodeMutation.isPending ? 'Generating...' : 'Generate'}
                                                         </Badge>
                                                     )}
                                                 </td>

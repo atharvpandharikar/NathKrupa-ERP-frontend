@@ -158,7 +158,7 @@ export const financeApi = {
   postForm: <T>(path: string, form: FormData) => request<T>(FINANCE_BASE, path, { method: "POST", body: form }),
 
   // OPTIMIZATION: Lightning-fast transaction search powered by Typesense
-  searchTransactions: (query: string) => request<{ count: number; results: any[]; search_time_ms: number }>(FINANCE_BASE, `/transactions/search/?q=${encodeURIComponent(query)}`),
+  searchTransactions: (query: string) => request<{ count: number; results: any[]; search_time_ms: number }>(FINANCE_BASE, `/transactions/search/?q=${encodeURIComponent(query)}&num_typos=3`),
 
   // Create a finance transaction for manufacturing payment
   createManufacturingPayment: async (payment: {

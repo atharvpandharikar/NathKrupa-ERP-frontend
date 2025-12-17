@@ -158,6 +158,7 @@ export interface ShopProduct {
     is_cod?: boolean;
     hsn_code?: string;
     barcode?: string;
+    barcode_number?: string;
     image?: string;
     category?: {
         id: string;
@@ -449,6 +450,11 @@ export const shopProductsApi = {
     get: async (productId: string) => {
         const response = await shopApi.get<any>(`/shop-product-detailview/${productId}/`);
         return response.error ? null : response.product_data?.[0];
+    },
+    
+    generateBarcode: async (productId: string) => {
+        const response = await shopApi.post<any>(`/shop/generate-barcode/${productId}/`, {});
+        return response;
     },
 
     create: (data: Partial<ShopProduct>) => shopApi.post<any>('/shop/create/products/', data),
