@@ -457,6 +457,11 @@ export const shopProductsApi = {
         return response;
     },
 
+    getProductByBarcode: async (barcode: string) => {
+        const response = await shopApi.get<any>(`/shop/get-product-from-barcode/${barcode}/`);
+        return response;
+    },
+
     create: (data: Partial<ShopProduct>) => shopApi.post<any>('/shop/create/products/', data),
 
     update: (productId: string, data: Partial<ShopProduct>) =>

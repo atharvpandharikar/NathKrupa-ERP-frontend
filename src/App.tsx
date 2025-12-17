@@ -73,6 +73,7 @@ const LazyInventoryLowStock = React.lazy(() => import("./pages/inventory/LowStoc
 // User Admin (Shop Management) routes
 const LazyUserAdminDashboard = React.lazy(() => import("./pages/user-admin/UserAdminDashboard"));
 const LazyProductList = React.lazy(() => import("./pages/user-admin/ProductList"));
+const LazyProductView = React.lazy(() => import("./pages/user-admin/ProductView"));
 const LazyAddProduct = React.lazy(() => import("./pages/user-admin/AddProduct"));
 const LazyCategoryList = React.lazy(() => import("./pages/user-admin/CategoryList"));
 const LazyOrderList = React.lazy(() => import("./pages/user-admin/OrderList"));
@@ -154,7 +155,7 @@ const App = () => {
                     <Route path="products" element={<LazyProductList />} />
                     <Route path="products/add" element={<LazyAddProduct />} />
                     <Route path="products/edit/:id" element={<LazyProductList />} />
-                    <Route path="products/view/:id" element={<LazyProductList />} />
+                    <Route path="products/view/:id" element={<LazyProductView />} />
                     <Route path="categories" element={<LazyCategoryList />} />
                     <Route path="categories/add" element={<LazyCategoryList />} />
                     <Route path="categories/edit/:id" element={<LazyCategoryList />} />
