@@ -391,26 +391,6 @@ export default function ProductView() {
                                 </div>
                             </CardContent>
                         </Card>
-
-                        {/* Meta Info */}
-                        <Card>
-                            <CardContent className="p-4 space-y-3">
-                                <div className="space-y-1">
-                                    <label className="text-xs font-medium text-gray-500 uppercase">Created At</label>
-                                    <div className="flex items-center gap-2 text-sm text-gray-900">
-                                        <Calendar className="w-3 h-3 text-gray-400" />
-                                        {product.created_at ? new Date(product.created_at).toLocaleDateString() : '-'}
-                                    </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs font-medium text-gray-500 uppercase">Last Updated</label>
-                                    <div className="flex items-center gap-2 text-sm text-gray-900">
-                                        <Calendar className="w-3 h-3 text-gray-400" />
-                                        {product.updated_at ? new Date(product.updated_at).toLocaleDateString() : '-'}
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
                     </div>
                 </div>
             </div>

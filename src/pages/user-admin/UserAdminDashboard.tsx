@@ -148,6 +148,18 @@ export default function UserAdminDashboard() {
             hoverBg: 'hover:bg-emerald-100',
             path: '/user-admin/analytics',
             stats: { value: '₹12.5L', change: '+12.5%', trend: 'up' }
+        },
+        {
+            id: 'label-printing',
+            title: 'Label Printing',
+            description: 'Export CSV for product labels',
+            icon: FileText,
+            color: 'slate',
+            bgColor: 'bg-slate-50',
+            iconColor: 'text-slate-600',
+            hoverBg: 'hover:bg-slate-100',
+            path: '/user-admin/label-printing',
+            stats: { value: 'Export', change: '', trend: 'up' }
         }
     ];
 

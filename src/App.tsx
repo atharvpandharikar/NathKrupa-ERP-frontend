@@ -95,6 +95,7 @@ const LazyCustomerGroups = React.lazy(() => import("./pages/user-admin/CustomerG
 const LazyCustomerPrices = React.lazy(() => import("./pages/user-admin/CustomerPrices"));
 const LazyCreateQuote = React.lazy(() => import("./pages/user-admin/CreateQuote"));
 const LazyExportHistory = React.lazy(() => import("./pages/user-admin/ExportHistory"));
+const LazyLabelPrinting = React.lazy(() => import("./pages/user-admin/LabelPrinting"));
 const LazyShopAdminLayout = React.lazy(() => import("./components/layout/ShopAdminLayout"));
 
 // Wrapper component for ShopAdminLayout
@@ -195,6 +196,7 @@ const App = () => {
                     <Route path="garage-vehicles" element={<LazyGarageVehicleList />} />
                     <Route path="vehicle-compatibility" element={<LazyVehicleCompatibilityList />} />
                     <Route path="export-history" element={<LazyExportHistory />} />
+                    <Route path="label-printing" element={<LazyLabelPrinting />} />
                   </Route>
 
                   {/* Dashboard & feature routes use the main layout and require auth */}
