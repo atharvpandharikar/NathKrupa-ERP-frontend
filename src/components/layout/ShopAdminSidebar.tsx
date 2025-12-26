@@ -22,8 +22,7 @@ import {
     User as UserIcon,
     Laptop,
     Settings,
-    ChevronDown,
-    ChevronRight
+    Printer
 } from "lucide-react";
 import { ThemeMode, useTheme } from "@/hooks/useTheme";
 import { authApi, getTokens } from "@/lib/api";
@@ -87,6 +86,7 @@ const navigationGroups: NavGroup[] = [
             { title: "Quotations", icon: Quote, url: "/user-admin/quotations" },
             { title: "SEO Entries", icon: Search, url: "/user-admin/seo" },
             { title: "Garage Vehicles", icon: Car, url: "/user-admin/garage-vehicles" },
+            { title: "Label Printing", icon: Printer, url: "/user-admin/label-printing" },
         ]
     }
 ];
