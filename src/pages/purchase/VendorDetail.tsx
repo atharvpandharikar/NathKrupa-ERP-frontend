@@ -343,6 +343,13 @@ export default function VendorDetail() {
                         </div>
 
                         <div>
+                            <label className="text-sm font-medium text-gray-600">Due Amount</label>
+                            <div className="text-lg font-semibold text-orange-600">
+                                {formatCurrency(parseFloat(vendor.due_amount || '0'))}
+                            </div>
+                        </div>
+
+                        <div>
                             <label className="text-sm font-medium text-gray-600">Created</label>
                             <div className="text-sm">{new Date(vendor.created_at).toLocaleDateString()}</div>
                         </div>

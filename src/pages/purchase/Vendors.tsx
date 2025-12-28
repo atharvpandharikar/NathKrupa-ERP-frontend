@@ -62,6 +62,7 @@ interface NewVendor {
     gst_number: string;
     priority: 'High' | 'Medium' | 'Low';
     rating: number;
+    due_amount: string;
     contacts: Array<{
         name: string;
         mobile_number: string;
@@ -98,6 +99,7 @@ export default function Vendors() {
         gst_number: '',
         priority: 'Medium',
         rating: 3,
+        due_amount: '',
         contacts: [{ name: '', mobile_number: '' }],
         addresses: [{ address: '' }],
         bank_details: [{ bank_name: '', ifsc_code: '', branch: '', account_number: '' }]
@@ -416,7 +418,8 @@ export default function Vendors() {
                 email: newVendor.email,
                 gst_number: newVendor.gst_number,
                 priority: newVendor.priority,
-                rating: newVendor.rating
+                rating: newVendor.rating,
+                due_amount: newVendor.due_amount || '0.00'
             };
 
             // Create vendor via API
@@ -478,6 +481,7 @@ export default function Vendors() {
                 gst_number: '',
                 priority: 'Medium',
                 rating: 3,
+                due_amount: '',
                 contacts: [{ name: '', mobile_number: '' }],
                 addresses: [{ address: '' }],
                 bank_details: [{ bank_name: '', ifsc_code: '', branch: '', account_number: '' }]
@@ -765,6 +769,19 @@ export default function Vendors() {
                                                 <SelectItem value="5">5 Stars</SelectItem>
                                             </SelectContent>
                                         </Select>
+                                    </div>
+
+                                    <div>
+                                        <Label htmlFor="due_amount">Due Amount</Label>
+                                        <Input
+                                            id="due_amount"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            value={newVendor.due_amount}
+                                            onChange={(e) => setNewVendor(prev => ({ ...prev, due_amount: e.target.value }))}
+                                            placeholder="0.00"
+                                        />
                                     </div>
                                 </div>
                             </div>

@@ -718,6 +718,7 @@ export interface Vendor {
   email: string;
   rating: number;
   priority: 'High' | 'Medium' | 'Low';
+  due_amount?: string;
   created_at: string;
   updated_at: string;
   bank_details: VendorBankDetail[];
