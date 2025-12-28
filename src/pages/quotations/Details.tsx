@@ -199,7 +199,7 @@ export default function QuotationDetails() {
 
     // Load accounts for finance integration - handle pagination
     if (openConvert && accounts.length === 0) {
-      financeApi.get<any>('/accounts/?page_size=1000')
+      financeApi.get<any>('/accounts/?limit=20&offset=0')
         .then((response) => {
           // Extract results from paginated response or use array directly
           const accountsData = Array.isArray(response) ? response : (response.results || []);

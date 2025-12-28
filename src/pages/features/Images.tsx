@@ -6,6 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+} from '@/components/ui/pagination';
 // API_ROOT comes from central api helper; uses HTTPS in production
 
 interface VehicleModel { id: number; name: string }
@@ -29,6 +37,8 @@ function priceLabel(p: FeaturePrice): string {
   return `${vm} / ${cat}${typ}`;
 }
 
+const PAGE_SIZE = 20;
+
 export default function FeatureImagesPage() {
   const { organizationName } = useOrganization();
   const [prices, setPrices] = useState<FeaturePrice[]>([]);
@@ -40,12 +50,27 @@ export default function FeatureImagesPage() {
   const [uploadQueue, setUploadQueue] = useState<Record<number, File[]>>({});
   const [altMap, setAltMap] = useState<Record<number, string>>({});
   const [savingByPrice, setSavingByPrice] = useState<Record<number, boolean>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   useEffect(() => {
     document.title = `Feature Images  | ${organizationName}`;
-    api.get<FeaturePrice[]>("/feature-prices/")
-      .then(async (prs) => {
+    const fetchPrices = async () => {
+      setLoading(true);
+      try {
+        const offset = (currentPage - 1) * PAGE_SIZE;
+        const response = await api.get<any>(`/feature-prices/?limit=${PAGE_SIZE}&offset=${offset}`);
+        
+        // Handle paginated response
+        const prs = Array.isArray(response) ? response : (response.results || response.data || []);
+        const count = response.count || prs.length;
+        
         setPrices(prs);
+        setTotalCount(count);
+        
         // Prefetch primary image per price so preview shows without expanding
         await Promise.all(prs.map(async (p) => {
           const pid = p.id;
@@ -62,9 +87,15 @@ export default function FeatureImagesPage() {
             setLoadingByPrice(prev => ({ ...prev, [pid]: false }));
           }
         }));
-      })
-      .catch(() => toast({ title: "Failed to load prices", variant: "destructive" }));
-  }, [organizationName]);
+      } catch (error) {
+        toast({ title: "Failed to load prices", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchPrices();
+  }, [organizationName, currentPage]);
 
   const filteredPrices = useMemo(() => {
     const q = query.toLowerCase();
@@ -276,10 +307,72 @@ export default function FeatureImagesPage() {
                 </div>
               );
             })}
-            {filteredPrices.length === 0 && (
+            {filteredPrices.length === 0 && !loading && (
               <div className="p-8 text-center text-muted-foreground">No matching feature prices.</div>
             )}
+            {loading && (
+              <div className="p-8 text-center text-muted-foreground">Loading feature prices...</div>
+            )}
           </div>
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t p-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {(currentPage - 1) * PAGE_SIZE + 1} to {Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} prices
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage > 1) setCurrentPage(currentPage - 1);
+                      }}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : undefined}
+                    />
+                  </PaginationItem>
+                  {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setCurrentPage(pageNum);
+                          }}
+                          isActive={currentPage === pageNum}
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    );
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+                      }}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : undefined}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
         </CardContent>
       </Card>
     </section>

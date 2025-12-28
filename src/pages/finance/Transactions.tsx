@@ -158,7 +158,7 @@ export default function Transactions() {
 
   useEffect(() => {
     financeApi
-      .get<any>("/accounts/?page_size=1000")
+      .get<any>("/accounts/?limit=20&offset=0")
       .then((res) => setAccounts(res.results || res))
       .catch(console.error);
   }, []);

@@ -95,8 +95,8 @@ const Reports = () => {
 
             // Fetch all data in parallel
             const [accountsResponse, transactionsResponse, summaryResponse, overallBalanceResponse] = await Promise.all([
-                financeApi.get<any>('/accounts/?page_size=1000'),
-                financeApi.get<any>(`/transactions/?from_date=${fromDate}&to_date=${toDate}&page_size=1000`),
+                financeApi.get<any>('/accounts/?limit=20&offset=0'),
+                financeApi.get<any>(`/transactions/?from_date=${fromDate}&to_date=${toDate}&limit=20&offset=0`),
                 financeApi.get<TransactionSummary>(`/transactions/summary/?from_date=${fromDate}&to_date=${toDate}`),
                 financeApi.get<OverallBalance>('/reports/overall-balance/')
             ]);

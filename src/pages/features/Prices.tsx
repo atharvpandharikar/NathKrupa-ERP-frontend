@@ -25,17 +25,21 @@ interface FeatureType { id: number; name: string; category: FeatureCategory; }
 interface FeaturePrice { id: number; vehicle_model: VehicleModel; feature_category?: FeatureCategory | null; feature_type?: FeatureType | null; price: string }
 interface FeatureImage { id: number; image: string; alt_text?: string | null; feature_price: number }
 
+const PAGE_SIZE = 20;
+
 export default function FeaturePricesPage() {
   const { organizationName } = useOrganization();
+  const [currentPage, setCurrentPage] = useState(1);
   const {
     prices: items,
     models,
     categories,
     types,
     images,
+    totalCount,
     loading,
     error,
-  } = useOptimizedAllFeatureData();
+  } = useOptimizedAllFeatureData(currentPage, PAGE_SIZE);
 
   const [itemsState, setItems] = useState<FeaturePrice[]>([]);
   const [query, setQuery] = useState("");

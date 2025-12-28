@@ -136,11 +136,11 @@ export default function GenerateQuotation() {
   const [errors, setErrors] = useState<Partial<CustomerInfo>>({});
   useEffect(() => {
     document.title = `Generate Quotation | ${organizationName}`;
-    // load vehicle types, makers, and categories - handle pagination
+    // load vehicle types, makers, and categories - use limited results for dropdowns
     Promise.all([
-      api.get<any>("/vehicle-types/?page_size=1000"),
-      api.get<any>("/vehicle-makers/?page_size=1000"),
-      api.get<any>("/feature-categories/?page_size=1000")
+      api.get<any>("/vehicle-types/?limit=20&offset=0"),
+      api.get<any>("/vehicle-makers/?limit=20&offset=0"),
+      api.get<any>("/feature-categories/?limit=20&offset=0")
     ]).then(([vtRes, mkRes, fcRes]) => {
       // Extract results from paginated response or use array directly
       const vt = Array.isArray(vtRes) ? vtRes : (vtRes.results || []);
@@ -165,7 +165,7 @@ export default function GenerateQuotation() {
   // When vehicle type changes, load models by type
   useEffect(() => {
     if (!vehicle.typeId) { setModelsByType([]); setModelsForMaker([]); return; }
-    api.get<any>(`/vehicle-models/by_vehicle_type/?vehicle_type_id=${vehicle.typeId}&page_size=1000`)
+    api.get<any>(`/vehicle-models/by_vehicle_type/?vehicle_type_id=${vehicle.typeId}&limit=20&offset=0`)
       .then(msRes => {
         // Extract results from paginated response or use array directly
         const ms = Array.isArray(msRes) ? msRes : (msRes.results || []);
@@ -211,12 +211,12 @@ export default function GenerateQuotation() {
     const relevantCategoryIds = [categoryId, ...subCats(categoryId).map(sc => sc.id)];
 
     try {
-      // Fetch feature types and prices for each category separately and aggregate - handle pagination
+      // Fetch feature types and prices for each category separately and aggregate - use pagination
       const typePromises = relevantCategoryIds.map(cid =>
-        api.get<any>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}&category_id=${cid}&page_size=1000`)
+        api.get<any>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}&category_id=${cid}&limit=20&offset=0`)
       );
       const pricePromises = relevantCategoryIds.map(cid =>
-        api.get<any>(`/feature-prices/?vehicle_model=${vehicle.modelId}&feature_category=${cid}&page_size=1000`)
+        api.get<any>(`/feature-prices/?vehicle_model=${vehicle.modelId}&feature_category=${cid}&limit=20&offset=0`)
       );
 
       const [ftsArrays, fpsArrays] = await Promise.all([
@@ -741,7 +741,7 @@ export default function GenerateQuotation() {
                             // Use the appropriate price ID for the API call
                             const priceId = featureEntry ? featureEntry.fpId : categoryEntry.fpId;
                             console.log('Fetching images for priceId:', priceId);
-                            const imgsRes = await api.get<any>(`/feature-images/?feature_price=${priceId}&page_size=1000`);
+                            const imgsRes = await api.get<any>(`/feature-images/?feature_price=${priceId}&limit=20&offset=0`);
                             // Extract results from paginated response or use array directly
                             const imgs = Array.isArray(imgsRes) ? imgsRes : (imgsRes.results || []);
                             console.log('Loaded images:', imgs);

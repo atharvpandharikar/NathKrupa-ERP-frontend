@@ -71,7 +71,7 @@ export default function Accounts() {
         try {
             setLoading(true);
             // Handle pagination - accounts API returns paginated response
-            const response = await financeApi.get<any>('/accounts/?page_size=1000');
+            const response = await financeApi.get<any>('/accounts/?limit=20&offset=0');
             // Extract results from paginated response or use array directly
             const accountsData = Array.isArray(response) ? response : (response.results || []);
             setAccounts(accountsData);

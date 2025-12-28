@@ -425,8 +425,9 @@ export function useOptimizedWorkOrders(page = 1, pageSize = 20, searchTerm = '')
 
 /**
  * Optimized hook for fetching all data for the Feature Prices page with caching.
+ * Uses pagination for main data (prices) and limited results for reference data.
  */
-export function useOptimizedAllFeatureData() {
+export function useOptimizedAllFeatureData(page = 1, pageSize = 20) {
     const [data, setData] = useState<{
         prices: FeaturePrice[];
         models: VehicleModel[];
@@ -440,6 +441,7 @@ export function useOptimizedAllFeatureData() {
         types: [],
         images: [],
     });
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -447,57 +449,51 @@ export function useOptimizedAllFeatureData() {
         const fetchAllData = async () => {
             setLoading(true);
             const cacheKeys = {
-                prices: 'feature-prices-all',
-                models: 'vehicle-models-all',
-                categories: 'feature-categories-all',
-                types: 'feature-types-all',
-                images: 'feature-images-all',
+                models: 'vehicle-models-ref',
+                categories: 'feature-categories-ref',
+                types: 'feature-types-ref',
             };
 
             try {
-                // Check cache first
-                const cachedPrices = getCachedData<FeaturePrice[]>(cacheKeys.prices);
+                // Check cache first for reference data
                 const cachedModels = getCachedData<VehicleModel[]>(cacheKeys.models);
                 const cachedCategories = getCachedData<FeatureCategory[]>(cacheKeys.categories);
                 const cachedTypes = getCachedData<FeatureType[]>(cacheKeys.types);
-                const cachedImages = getCachedData<FeatureImage[]>(cacheKeys.images);
 
-                if (cachedPrices && cachedModels && cachedCategories && cachedTypes && cachedImages) {
-                    setData({
-                        prices: cachedPrices,
-                        models: cachedModels,
-                        categories: cachedCategories,
-                        types: cachedTypes,
-                        images: cachedImages,
-                    });
-                    setLoading(false);
-                    return;
+                // Fetch reference data (limited to 20 for dropdowns) - these are cached
+                let models: VehicleModel[] = [];
+                let categories: FeatureCategory[] = [];
+                let types: FeatureType[] = [];
+
+                if (cachedModels && cachedCategories && cachedTypes) {
+                    models = cachedModels;
+                    categories = cachedCategories;
+                    types = cachedTypes;
+                } else {
+                    const [modelsRes, categoriesRes, typesRes] = await Promise.all([
+                        api.get<any>('/vehicle-models/?limit=20&offset=0'),
+                        api.get<any>('/feature-categories/?limit=20&offset=0'),
+                        api.get<any>('/feature-types/?limit=20&offset=0'),
+                    ]);
+
+                    models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
+                    categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
+                    types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
+
+                    setCachedData(cacheKeys.models, models);
+                    setCachedData(cacheKeys.categories, categories);
+                    setCachedData(cacheKeys.types, types);
                 }
 
-                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
-                const [pricesRes, modelsRes, categoriesRes, typesRes, imagesRes] = await Promise.all([
-                    api.get<any>('/feature-prices/?page_size=1000'),
-                    api.get<any>('/vehicle-models/?page_size=1000'),
-                    api.get<any>('/feature-categories/?page_size=1000'),
-                    api.get<any>('/feature-types/?page_size=1000'),
-                    api.get<any>('/feature-images/?page_size=1000'),
-                ]);
-
-                // Extract results from paginated response or use array directly
+                // Fetch paginated prices (main list data)
+                const offset = (page - 1) * pageSize;
+                const pricesRes = await api.get<any>(`/feature-prices/?limit=${pageSize}&offset=${offset}`);
                 const prices = Array.isArray(pricesRes) ? pricesRes : (pricesRes.results || []);
-                const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
-                const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
-                const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
-                const images = Array.isArray(imagesRes) ? imagesRes : (imagesRes.results || []);
+                const count = pricesRes.count || prices.length;
 
-                // Set cache
-                setCachedData(cacheKeys.prices, prices);
-                setCachedData(cacheKeys.models, models);
-                setCachedData(cacheKeys.categories, categories);
-                setCachedData(cacheKeys.types, types);
-                setCachedData(cacheKeys.images, images);
-
-                setData({ prices, models, categories, types, images });
+                // Don't fetch all images - they're loaded on demand per price
+                setData({ prices, models, categories, types, images: [] });
+                setTotalCount(count);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -506,15 +502,15 @@ export function useOptimizedAllFeatureData() {
         };
 
         fetchAllData();
-    }, []);
+    }, [page, pageSize]);
 
-    return { ...data, loading, error };
+    return { ...data, totalCount, loading, error };
 }
 
 /**
  * Optimized hook for fetching all data for the Feature Categories page with caching.
  */
-export function useOptimizedFeatureCategoriesPageData() {
+export function useOptimizedFeatureCategoriesPageData(page = 1, pageSize = 20) {
     const [data, setData] = useState<{
         categories: FeatureCategory[];
         vehicleTypes: any[];
@@ -522,6 +518,7 @@ export function useOptimizedFeatureCategoriesPageData() {
         categories: [],
         vehicleTypes: [],
     });
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -529,39 +526,30 @@ export function useOptimizedFeatureCategoriesPageData() {
         const fetchPageData = async () => {
             setLoading(true);
             const cacheKeys = {
-                categories: 'feature-categories-all',
-                vehicleTypes: 'vehicle-types-all',
+                vehicleTypes: 'vehicle-types-ref',
             };
 
             try {
-                // Check cache first
-                const cachedCategories = getCachedData<FeatureCategory[]>(cacheKeys.categories);
+                // Check cache first for reference data
                 const cachedVehicleTypes = getCachedData<any[]>(cacheKeys.vehicleTypes);
 
-                if (cachedCategories && cachedVehicleTypes) {
-                    setData({
-                        categories: cachedCategories,
-                        vehicleTypes: cachedVehicleTypes,
-                    });
-                    setLoading(false);
-                    return;
+                let vehicleTypes: any[] = [];
+                if (cachedVehicleTypes) {
+                    vehicleTypes = cachedVehicleTypes;
+                } else {
+                    const vehicleTypesRes = await api.get<any>('/vehicle-types/?limit=20&offset=0');
+                    vehicleTypes = Array.isArray(vehicleTypesRes) ? vehicleTypesRes : (vehicleTypesRes.results || []);
+                    setCachedData(cacheKeys.vehicleTypes, vehicleTypes);
                 }
 
-                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
-                const [categoriesRes, vehicleTypesRes] = await Promise.all([
-                    api.get<any>('/feature-categories/?page_size=1000'),
-                    api.get<any>('/vehicle-types/?page_size=1000'),
-                ]);
-
-                // Extract results from paginated response or use array directly
+                // Fetch paginated categories (main list data)
+                const offset = (page - 1) * pageSize;
+                const categoriesRes = await api.get<any>(`/feature-categories/?limit=${pageSize}&offset=${offset}`);
                 const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
-                const vehicleTypes = Array.isArray(vehicleTypesRes) ? vehicleTypesRes : (vehicleTypesRes.results || []);
-
-                // Set cache
-                setCachedData(cacheKeys.categories, categories);
-                setCachedData(cacheKeys.vehicleTypes, vehicleTypes);
+                const count = categoriesRes.count || categories.length;
 
                 setData({ categories, vehicleTypes });
+                setTotalCount(count);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -570,16 +558,16 @@ export function useOptimizedFeatureCategoriesPageData() {
         };
 
         fetchPageData();
-    }, []);
+    }, [page, pageSize]);
 
-    return { ...data, loading, error };
+    return { ...data, totalCount, loading, error };
 }
 
 
 /**
  * Optimized hook for fetching all data for the Feature Types page with caching.
  */
-export function useOptimizedFeatureTypesPageData() {
+export function useOptimizedFeatureTypesPageData(page = 1, pageSize = 20) {
     const [data, setData] = useState<{
         types: FeatureType[];
         categories: FeatureCategory[];
@@ -589,6 +577,7 @@ export function useOptimizedFeatureTypesPageData() {
         categories: [],
         models: [],
     });
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -596,45 +585,42 @@ export function useOptimizedFeatureTypesPageData() {
         const fetchPageData = async () => {
             setLoading(true);
             const cacheKeys = {
-                types: 'feature-types-all',
-                categories: 'feature-categories-all',
-                models: 'vehicle-models-all',
+                categories: 'feature-categories-ref',
+                models: 'vehicle-models-ref',
             };
 
             try {
-                // Check cache first
-                const cachedTypes = getCachedData<FeatureType[]>(cacheKeys.types);
+                // Check cache first for reference data
                 const cachedCategories = getCachedData<FeatureCategory[]>(cacheKeys.categories);
                 const cachedModels = getCachedData<VehicleModel[]>(cacheKeys.models);
 
-                if (cachedTypes && cachedCategories && cachedModels) {
-                    setData({
-                        types: cachedTypes,
-                        categories: cachedCategories,
-                        models: cachedModels,
-                    });
-                    setLoading(false);
-                    return;
+                let categories: FeatureCategory[] = [];
+                let models: VehicleModel[] = [];
+
+                if (cachedCategories && cachedModels) {
+                    categories = cachedCategories;
+                    models = cachedModels;
+                } else {
+                    const [categoriesRes, modelsRes] = await Promise.all([
+                        api.get<any>('/feature-categories/?limit=20&offset=0'),
+                        api.get<any>('/vehicle-models/?limit=20&offset=0'),
+                    ]);
+
+                    categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
+                    models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
+
+                    setCachedData(cacheKeys.categories, categories);
+                    setCachedData(cacheKeys.models, models);
                 }
 
-                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
-                const [typesRes, categoriesRes, modelsRes] = await Promise.all([
-                    api.get<any>('/feature-types/?page_size=1000'),
-                    api.get<any>('/feature-categories/?page_size=1000'),
-                    api.get<any>('/vehicle-models/?page_size=1000'),
-                ]);
-
-                // Extract results from paginated response or use array directly
+                // Fetch paginated types (main list data)
+                const offset = (page - 1) * pageSize;
+                const typesRes = await api.get<any>(`/feature-types/?limit=${pageSize}&offset=${offset}`);
                 const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
-                const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
-                const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
-
-                // Set cache
-                setCachedData(cacheKeys.types, types);
-                setCachedData(cacheKeys.categories, categories);
-                setCachedData(cacheKeys.models, models);
+                const count = typesRes.count || types.length;
 
                 setData({ types, categories, models });
+                setTotalCount(count);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -643,40 +629,52 @@ export function useOptimizedFeatureTypesPageData() {
         };
 
         fetchPageData();
-    }, []);
+    }, [page, pageSize]);
 
-    return { ...data, loading, error };
+    return { ...data, totalCount, loading, error };
 }
 
 
 /**
  * Optimized hook for fetching vehicle types with caching.
+ * For reference data (dropdowns), uses limited results. For list pages, use pagination.
  */
-export function useOptimizedVehicleTypes() {
+export function useOptimizedVehicleTypes(page = 1, pageSize = 20, forReference = false) {
     const [vehicleTypes, setVehicleTypes] = useState<any[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchVehicleTypes = async () => {
             setLoading(true);
-            const cacheKey = 'vehicle-types-all';
+            const cacheKey = forReference ? 'vehicle-types-ref' : `vehicle-types-page-${page}`;
 
             try {
-                // Check cache first
-                const cachedData = getCachedData<any[]>(cacheKey);
-                if (cachedData) {
-                    setVehicleTypes(cachedData);
-                    setLoading(false);
-                    return;
+                // Check cache first (only for reference data)
+                if (forReference) {
+                    const cachedData = getCachedData<any[]>(cacheKey);
+                    if (cachedData) {
+                        setVehicleTypes(cachedData);
+                        setLoading(false);
+                        return;
+                    }
                 }
 
-                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
-                const response = await api.get<any>('/vehicle-types/?page_size=1000');
+                // Fetch from API with pagination
+                const offset = forReference ? 0 : (page - 1) * pageSize;
+                const limit = forReference ? 20 : pageSize;
+                const response = await api.get<any>(`/vehicle-types/?limit=${limit}&offset=${offset}`);
+                
                 // Extract results from paginated response or use array directly
                 const vehicleTypesData = Array.isArray(response) ? response : (response.results || []);
-                setCachedData(cacheKey, vehicleTypesData);
+                const count = response.count || vehicleTypesData.length;
+                
+                if (forReference) {
+                    setCachedData(cacheKey, vehicleTypesData);
+                }
                 setVehicleTypes(vehicleTypesData);
+                setTotalCount(count);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -685,39 +683,51 @@ export function useOptimizedVehicleTypes() {
         };
 
         fetchVehicleTypes();
-    }, []);
+    }, [page, pageSize, forReference]);
 
-    return { vehicleTypes, loading, error };
+    return { vehicleTypes, totalCount, loading, error };
 }
 
 /**
  * Optimized hook for fetching vehicle makers with caching.
+ * For reference data (dropdowns), uses limited results. For list pages, use pagination.
  */
-export function useOptimizedVehicleMakers() {
+export function useOptimizedVehicleMakers(page = 1, pageSize = 20, forReference = false) {
     const [vehicleMakers, setVehicleMakers] = useState<any[]>([]);
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchVehicleMakers = async () => {
             setLoading(true);
-            const cacheKey = 'vehicle-makers-all';
+            const cacheKey = forReference ? 'vehicle-makers-ref' : `vehicle-makers-page-${page}`;
 
             try {
-                // Check cache first
-                const cachedData = getCachedData<any[]>(cacheKey);
-                if (cachedData) {
-                    setVehicleMakers(cachedData);
-                    setLoading(false);
-                    return;
+                // Check cache first (only for reference data)
+                if (forReference) {
+                    const cachedData = getCachedData<any[]>(cacheKey);
+                    if (cachedData) {
+                        setVehicleMakers(cachedData);
+                        setLoading(false);
+                        return;
+                    }
                 }
 
-                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
-                const response = await api.get<any>('/vehicle-makers/?page_size=1000');
+                // Fetch from API with pagination
+                const offset = forReference ? 0 : (page - 1) * pageSize;
+                const limit = forReference ? 20 : pageSize;
+                const response = await api.get<any>(`/vehicle-makers/?limit=${limit}&offset=${offset}`);
+                
                 // Extract results from paginated response or use array directly
                 const vehicleMakersData = Array.isArray(response) ? response : (response.results || []);
-                setCachedData(cacheKey, vehicleMakersData);
+                const count = response.count || vehicleMakersData.length;
+                
+                if (forReference) {
+                    setCachedData(cacheKey, vehicleMakersData);
+                }
                 setVehicleMakers(vehicleMakersData);
+                setTotalCount(count);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -726,15 +736,15 @@ export function useOptimizedVehicleMakers() {
         };
 
         fetchVehicleMakers();
-    }, []);
+    }, [page, pageSize, forReference]);
 
-    return { vehicleMakers, loading, error };
+    return { vehicleMakers, totalCount, loading, error };
 }
 
 /**
  * Optimized hook for fetching all data for the Vehicle Models page with caching.
  */
-export function useOptimizedVehicleModelsPageData() {
+export function useOptimizedVehicleModelsPageData(page = 1, pageSize = 20) {
     const [data, setData] = useState<{
         models: VehicleModel[];
         makers: any[];
@@ -744,6 +754,7 @@ export function useOptimizedVehicleModelsPageData() {
         makers: [],
         types: [],
     });
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -751,45 +762,42 @@ export function useOptimizedVehicleModelsPageData() {
         const fetchPageData = async () => {
             setLoading(true);
             const cacheKeys = {
-                models: 'vehicle-models-all',
-                makers: 'vehicle-makers-all',
-                types: 'vehicle-types-all',
+                makers: 'vehicle-makers-ref',
+                types: 'vehicle-types-ref',
             };
 
             try {
-                // Check cache first
-                const cachedModels = getCachedData<VehicleModel[]>(cacheKeys.models);
+                // Check cache first for reference data
                 const cachedMakers = getCachedData<any[]>(cacheKeys.makers);
                 const cachedTypes = getCachedData<any[]>(cacheKeys.types);
 
-                if (cachedModels && cachedMakers && cachedTypes) {
-                    setData({
-                        models: cachedModels,
-                        makers: cachedMakers,
-                        types: cachedTypes,
-                    });
-                    setLoading(false);
-                    return;
+                let makers: any[] = [];
+                let types: any[] = [];
+
+                if (cachedMakers && cachedTypes) {
+                    makers = cachedMakers;
+                    types = cachedTypes;
+                } else {
+                    const [makersRes, typesRes] = await Promise.all([
+                        api.get<any>('/vehicle-makers/?limit=20&offset=0'),
+                        api.get<any>('/vehicle-types/?limit=20&offset=0'),
+                    ]);
+
+                    makers = Array.isArray(makersRes) ? makersRes : (makersRes.results || []);
+                    types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
+
+                    setCachedData(cacheKeys.makers, makers);
+                    setCachedData(cacheKeys.types, types);
                 }
 
-                // Fetch from API - use page_size=1000 to get all results (bypass pagination for reference data)
-                const [modelsRes, makersRes, typesRes] = await Promise.all([
-                    api.get<any>('/vehicle-models/?page_size=1000'),
-                    api.get<any>('/vehicle-makers/?page_size=1000'),
-                    api.get<any>('/vehicle-types/?page_size=1000'),
-                ]);
-
-                // Extract results from paginated response or use array directly
+                // Fetch paginated models (main list data)
+                const offset = (page - 1) * pageSize;
+                const modelsRes = await api.get<any>(`/vehicle-models/?limit=${pageSize}&offset=${offset}`);
                 const models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
-                const makers = Array.isArray(makersRes) ? makersRes : (makersRes.results || []);
-                const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
-
-                // Set cache
-                setCachedData(cacheKeys.models, models);
-                setCachedData(cacheKeys.makers, makers);
-                setCachedData(cacheKeys.types, types);
+                const count = modelsRes.count || models.length;
 
                 setData({ models, makers, types });
+                setTotalCount(count);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -798,9 +806,9 @@ export function useOptimizedVehicleModelsPageData() {
         };
 
         fetchPageData();
-    }, []);
+    }, [page, pageSize]);
 
-    return { ...data, loading, error };
+    return { ...data, totalCount, loading, error };
 }
 
 

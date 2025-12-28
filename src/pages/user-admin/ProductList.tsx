@@ -766,7 +766,11 @@ export default function ProductList() {
                                                     {product.hsn_code || '-'}
                                                 </td>
                                                 <td className="px-2 py-2 text-xs text-gray-900 text-center">
-                                                    {product.barcode_number || product.barcode || (
+                                                    {product.barcode_number && product.barcode_number.trim() ? (
+                                                        <span className="font-mono">
+                                                            {product.barcode_number}
+                                                        </span>
+                                                    ) : (
                                                         <Badge 
                                                             variant="outline" 
                                                             onClick={async (e) => {

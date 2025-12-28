@@ -658,7 +658,7 @@ export const shopBrandsApi = {
             // If we got less than 100 items, the API might not support pagination
             // Try a direct call with a large page size
             if (paginatedResult.length < 100) {
-                const directResponse = await shopApi.get<any>('/shop/brands/?page_size=1000');
+                const directResponse = await shopApi.get<any>('/shop/brands/?limit=20&offset=0');
 
                 let directItems: ShopBrand[] = [];
                 if (Array.isArray(directResponse)) {

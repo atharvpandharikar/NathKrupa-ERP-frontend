@@ -102,7 +102,7 @@ export default function FinanceDashboard() {
         try {
             setLoading(true);
             // Fetch accounts - handle pagination
-            const accountsResponse = await financeApi.get<any>('/accounts/?page_size=1000');
+            const accountsResponse = await financeApi.get<any>('/accounts/?limit=20&offset=0');
             // Extract results from paginated response or use array directly
             const accountsData = Array.isArray(accountsResponse) ? accountsResponse : (accountsResponse.results || []);
             setAccounts(accountsData);
