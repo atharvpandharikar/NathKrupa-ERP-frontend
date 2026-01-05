@@ -122,10 +122,13 @@ export default function TransactionForm({
     const fetchAccounts = async () => {
         try {
             setLoading(true);
-            const data = await financeApi.get<Account[]>('/accounts/');
-            setAccounts(data);
+            const response = await financeApi.get<any>('/accounts/?limit=20&offset=0');
+            // Extract results from paginated response or use array directly
+            const accountsData = Array.isArray(response) ? response : (response.results || []);
+            setAccounts(accountsData);
         } catch (error) {
             console.error('Error fetching accounts:', error);
+            setAccounts([]); // Set empty array on error to prevent map errors
         } finally {
             setLoading(false);
         }
@@ -133,8 +136,10 @@ export default function TransactionForm({
 
     const fetchVendors = async () => {
         try {
-            const data = await purchaseApi.vendors.list();
-            setVendors(data);
+            const response = await purchaseApi.vendors.list();
+            // Handle pagination - extract results from paginated response or use array directly
+            const vendorsData = Array.isArray(response) ? response : ((response as any).results || []);
+            setVendors(vendorsData);
         } catch (error) {
             console.error('Error fetching vendors:', error);
             setVendors([]);
@@ -186,24 +191,33 @@ export default function TransactionForm({
         setCreateLoading(true);
 
         try {
-            const transactionData = {
-                ...formData,
+            const transactionData: any = {
                 account: parseInt(formData.account),
+                transaction_type: formData.transaction_type,
                 amount: parseFloat(formData.amount.toString()),
+                purpose: formData.purpose,
                 time: new Date(formData.time).toISOString(),
-                // Handle vendor selection for debit transactions
-                ...(formData.transaction_type === 'Debit' && {
-                    ...(useCustomVendor && formData.custom_vendor
-                        ? { to_party: formData.custom_vendor }
-                        : formData.vendor
-                            ? { vendor: parseInt(formData.vendor) }
-                            : {}
-                    )
-                }),
-                // Clear party fields that shouldn't be sent
-                ...(formData.transaction_type === 'Credit' && { to_party: '' }),
-                ...(formData.transaction_type === 'Debit' && !useCustomVendor && { to_party: '' }),
             };
+
+            // Add optional fields only if they have values
+            if (formData.from_party) {
+                transactionData.from_party = formData.from_party;
+            }
+            if (formData.to_party) {
+                transactionData.to_party = formData.to_party;
+            }
+            if (formData.vendor) {
+                transactionData.vendor = parseInt(formData.vendor);
+            }
+            if (formData.bill_no) {
+                transactionData.bill_no = formData.bill_no;
+            }
+            if (formData.utr_number) {
+                transactionData.utr_number = formData.utr_number;
+            }
+            if (formData.notes) {
+                transactionData.notes = formData.notes;
+            }
 
             await financeApi.createTransactionWithImage(transactionData, selectedImage || undefined);
 
@@ -276,11 +290,17 @@ export default function TransactionForm({
                                     <SelectValue placeholder="Select account" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {accounts.map((account) => (
-                                        <SelectItem key={account.id} value={account.id.toString()}>
-                                            {account.nickname} ({account.account_type})
-                                        </SelectItem>
-                                    ))}
+                                    {Array.isArray(accounts) && accounts.length > 0 ? (
+                                        accounts.map((account) => (
+                                            <SelectItem key={account.id} value={account.id.toString()}>
+                                                {account.nickname} ({account.account_type})
+                                            </SelectItem>
+                                        ))
+                                    ) : (
+                                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                            No accounts available
+                                        </div>
+                                    )}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -356,43 +376,73 @@ export default function TransactionForm({
                     )}
 
                     {formData.transaction_type === 'Debit' && (
-                        <div className="space-y-2">
-                            <Label htmlFor="vendor">Vendor *</Label>
+                        <div className="space-y-4">
                             <div className="space-y-2">
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="checkbox"
-                                        id="useCustomVendor"
-                                        checked={useCustomVendor}
-                                        onChange={(e) => setUseCustomVendor(e.target.checked)}
-                                        className="rounded"
-                                    />
-                                    <Label htmlFor="useCustomVendor" className="text-sm">
-                                        Use custom vendor name
-                                    </Label>
-                                </div>
+                                <Label htmlFor="vendor">Vendor (Optional)</Label>
+                                <div className="space-y-2">
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id="useCustomVendor"
+                                            checked={useCustomVendor}
+                                            onChange={(e) => {
+                                                setUseCustomVendor(e.target.checked);
+                                                if (e.target.checked) {
+                                                    handleInputChange('vendor', '');
+                                                } else {
+                                                    handleInputChange('custom_vendor', '');
+                                                }
+                                            }}
+                                            className="rounded"
+                                        />
+                                        <Label htmlFor="useCustomVendor" className="text-sm">
+                                            Use custom vendor name
+                                        </Label>
+                                    </div>
 
-                                {useCustomVendor ? (
-                                    <Input
-                                        id="custom_vendor"
-                                        value={formData.custom_vendor}
-                                        onChange={(e) => handleInputChange('custom_vendor', e.target.value)}
-                                        placeholder="Enter vendor name"
-                                        required
-                                    />
-                                ) : (
-                                    <Combobox
-                                        value={formData.vendor}
-                                        onChange={(value) => handleInputChange('vendor', value)}
-                                        options={vendors.map(vendor => ({
-                                            label: `${vendor.name} ${vendor.gst_number ? `(${vendor.gst_number})` : ''}`,
-                                            value: vendor.id.toString()
-                                        }))}
-                                        placeholder="Select vendor"
-                                        searchPlaceholder="Search vendors..."
-                                        emptyText="No vendors found"
-                                    />
-                                )}
+                                    {useCustomVendor ? (
+                                        <Input
+                                            id="custom_vendor"
+                                            value={formData.custom_vendor}
+                                            onChange={(e) => {
+                                                handleInputChange('custom_vendor', e.target.value);
+                                                handleInputChange('to_party', e.target.value);
+                                            }}
+                                            placeholder="Enter vendor name"
+                                        />
+                                    ) : (
+                                        <Combobox
+                                            value={formData.vendor}
+                                            onChange={(value) => {
+                                                handleInputChange('vendor', value);
+                                                const selectedVendor = vendors.find(v => v.id.toString() === value);
+                                                if (selectedVendor) {
+                                                    handleInputChange('to_party', selectedVendor.name);
+                                                }
+                                            }}
+                                            options={vendors.map(vendor => ({
+                                                label: `${vendor.name} ${vendor.gst_number ? `(${vendor.gst_number})` : ''}`,
+                                                value: vendor.id.toString()
+                                            }))}
+                                            placeholder="Select vendor (optional)"
+                                            searchPlaceholder="Search vendors..."
+                                            emptyText="No vendors found"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="to_party">To Party (Optional)</Label>
+                                <Input
+                                    id="to_party"
+                                    value={formData.to_party}
+                                    onChange={(e) => handleInputChange('to_party', e.target.value)}
+                                    placeholder="Who is receiving the payment"
+                                />
+                                <p className="text-xs text-gray-500">
+                                    This can be different from the vendor if payment is made to a different person/account
+                                </p>
                             </div>
                         </div>
                     )}

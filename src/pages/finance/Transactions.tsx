@@ -64,6 +64,7 @@ import { useOptimizedTransactions, TransactionSortOption } from "@/hooks/useOpti
 import { useToast } from "@/hooks/use-toast";
 import { exportService, ExportJob } from "@/services/exportService";
 import { useExportNotifications } from "@/context/ExportNotificationContext";
+import TransactionForm from "@/components/TransactionForm";
 
 /* =========================
    Types
@@ -182,37 +183,6 @@ export default function Transactions() {
   ========================= */
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [createLoading, setCreateLoading] = useState(false);
-  const [useCustomVendor, setUseCustomVendor] = useState(false);
-
-  const [formData, setFormData] = useState({
-    account: "",
-    transaction_type: "Credit" as "Credit" | "Debit",
-    amount: 0,
-    from_party: "",
-    to_party: "",
-    vendor: "",
-    custom_vendor: "",
-    purpose: "",
-    bill_no: "",
-    utr_number: "",
-    time: new Date().toISOString().slice(0, 16),
-  });
-
-  useEffect(() => {
-    if (
-      isCreateDialogOpen &&
-      formData.transaction_type === "Debit" &&
-      !vendorsLoaded
-    ) {
-      fetchVendors();
-    }
-  }, [isCreateDialogOpen, formData.transaction_type, vendorsLoaded, fetchVendors]);
-
-  const updateForm = <K extends keyof typeof formData>(
-    key: K,
-    value: typeof formData[K]
-  ) => setFormData((p) => ({ ...p, [key]: value }));
 
   /* =========================
      Helpers
@@ -294,25 +264,9 @@ export default function Transactions() {
             <Download className="h-4 w-4 mr-2" /> Export
           </Button>
 
-          <Dialog
-            open={isCreateDialogOpen}
-            onOpenChange={setIsCreateDialogOpen}
-          >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" /> New Transaction
-              </Button>
-            </DialogTrigger>
-
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create Transaction</DialogTitle>
-              </DialogHeader>
-
-              {/* --- FORM (unchanged logic) --- */}
-              {/* trimmed for brevity – identical to your original form */}
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" /> New Transaction
+          </Button>
         </div>
       </div>
 
@@ -389,6 +343,25 @@ export default function Transactions() {
           )}
         </CardContent>
       </Card>
+
+      {/* Transaction Form Dialog */}
+      <TransactionForm
+        isOpen={isCreateDialogOpen}
+        onClose={() => setIsCreateDialogOpen(false)}
+        onSuccess={() => {
+          refresh();
+          setIsCreateDialogOpen(false);
+          toast({
+            title: "Success",
+            description: "Transaction created successfully.",
+          });
+        }}
+        title="Create New Transaction"
+        description="Create a new financial transaction"
+        prefillData={{
+          transaction_type: "Credit"
+        }}
+      />
 
       {/* Export Dialog */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
