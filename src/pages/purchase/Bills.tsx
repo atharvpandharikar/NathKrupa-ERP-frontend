@@ -1,8 +1,7 @@
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useOptimizedPurchaseBills } from "@/hooks/useOptimizedData";
 import {
     Table,
     TableBody,
@@ -12,12 +11,24 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import {
+    Pagination,
+    PaginationContent,
+    PaginationItem,
+    PaginationLink,
+    PaginationPrevious,
+    PaginationNext,
+    PaginationEllipsis,
+} from "@/components/ui/pagination";
+import {
     Plus,
     Search,
     FileText,
     Calendar,
     DollarSign,
-    User
+    User,
+    ChevronsLeft,
+    ChevronsRight,
+    Loader2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { purchaseApi, type PurchaseBill } from "@/lib/api";
@@ -25,7 +36,18 @@ import { purchaseApi, type PurchaseBill } from "@/lib/api";
 export default function Bills() {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState("");
-    const { bills: billsData, loading, error: billsError } = useOptimizedPurchaseBills(searchTerm);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize] = useState(20);
+    const [billsData, setBillsData] = useState<PurchaseBill[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [pagination, setPagination] = useState<{
+        current_page: number;
+        total_pages: number;
+        page_size: number;
+        count: number;
+        next: string | null;
+        previous: string | null;
+    } | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const wasInputFocusedRef = useRef(false);
     const [dashboardStats, setDashboardStats] = useState({
@@ -39,6 +61,80 @@ export default function Bills() {
         total_outstanding: number;
         unallocated_payments: number;
     }>>({});
+
+    // Fetch bills with pagination
+    const fetchBills = useCallback(async () => {
+        try {
+            setLoading(true);
+            const params: Record<string, any> = {
+                page: currentPage,
+                page_size: pageSize,
+            };
+            
+            if (searchTerm && searchTerm.trim()) {
+                // Use search API for search terms
+                const searchResponse = await purchaseApi.bills.search(searchTerm) as any;
+                setBillsData(searchResponse.results || []);
+                setPagination(null); // Search doesn't return pagination
+            } else {
+                // Use list API with pagination
+                const response = await purchaseApi.bills.list(params) as any;
+                
+                // Handle new pagination format
+                if (response.pagination) {
+                    setBillsData(response.results || []);
+                    setPagination({
+                        current_page: response.pagination.current_page || currentPage,
+                        total_pages: response.pagination.total_pages || 1,
+                        page_size: response.pagination.page_size || pageSize,
+                        count: response.pagination.count || 0,
+                        next: response.pagination.next || null,
+                        previous: response.pagination.previous || null,
+                    });
+                } else if (response.results) {
+                    // Fallback for old format
+                    setBillsData(response.results || []);
+                    setPagination({
+                        current_page: currentPage,
+                        total_pages: Math.ceil((response.count || response.results.length) / pageSize),
+                        page_size: pageSize,
+                        count: response.count || response.results.length,
+                        next: response.next || null,
+                        previous: response.previous || null,
+                    });
+                } else {
+                    // Direct array response
+                    const billsArray = Array.isArray(response) ? response : [];
+                    setBillsData(billsArray);
+                    setPagination({
+                        current_page: 1,
+                        total_pages: 1,
+                        page_size: pageSize,
+                        count: billsArray.length,
+                        next: null,
+                        previous: null,
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch bills:', error);
+            setBillsData([]);
+            setPagination(null);
+        } finally {
+            setLoading(false);
+        }
+    }, [currentPage, pageSize, searchTerm]);
+
+    useEffect(() => {
+        fetchBills();
+    }, [fetchBills]);
+
+    // Reset to page 1 when search term changes
+    useEffect(() => {
+        if (currentPage !== 1) {
+            setCurrentPage(1);
+        }
+    }, [searchTerm]);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -104,8 +200,6 @@ export default function Bills() {
         }
     }, [vendorStats, searchTerm]);
 
-    // No client-side filtering needed - backend Typesense handles search
-    const filteredBills = billsData;
 
 
     const formatCurrency = (amount: number) => {
@@ -225,57 +319,185 @@ export default function Bills() {
             {/* Bills Table */}
             <Card>
                 <CardHeader>
-                    <CardTitle>All Purchase Bills ({filteredBills.length})</CardTitle>
+                    <CardTitle>
+                        All Purchase Bills ({pagination?.count || billsData.length})
+                        {pagination && pagination.total_pages > 1 && (
+                            <span className="text-sm font-normal text-gray-500 ml-2">
+                                (Page {pagination.current_page} of {pagination.total_pages})
+                            </span>
+                        )}
+                    </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="overflow-x-auto">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Bill Number</TableHead>
-                                    <TableHead>Vendor</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Items</TableHead>
-                                    <TableHead>Total Amount</TableHead>
-                                    <TableHead>Discount</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredBills.map((bill) => (
-                                    <TableRow
-                                        key={bill.id}
-                                        className="cursor-pointer hover:bg-muted/50"
-                                        onClick={() => navigate(`/purchase/bills/${bill.id}`)}
-                                    >
-                                        <TableCell>
-                                            <div className="font-medium">{bill.bill_number}</div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <User className="h-4 w-4 text-gray-400" />
-                                                {bill.vendor.name}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Calendar className="h-4 w-4 text-gray-400" />
-                                                {formatDate(bill.bill_date)}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="text-center">{bill.items_count}</div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="font-medium">{formatCurrency(bill.total_amount || 0)}</div>
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="text-sm">{formatCurrency(bill.discount || 0)}</div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
+                    {loading ? (
+                        <div className="flex justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <>
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Bill Number</TableHead>
+                                            <TableHead>Vendor</TableHead>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Items</TableHead>
+                                            <TableHead>Total Amount</TableHead>
+                                            <TableHead>Discount</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {billsData.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                                    No bills found
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : (
+                                            billsData.map((bill) => (
+                                                <TableRow
+                                                    key={bill.id}
+                                                    className="cursor-pointer hover:bg-muted/50"
+                                                    onClick={() => navigate(`/purchase/bills/${bill.id}`)}
+                                                >
+                                                    <TableCell>
+                                                        <div className="font-medium">{bill.bill_number}</div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            <User className="h-4 w-4 text-gray-400" />
+                                                            {bill.vendor?.name || 'N/A'}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            <Calendar className="h-4 w-4 text-gray-400" />
+                                                            {formatDate(bill.bill_date)}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="text-center">{bill.items_count || 0}</div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="font-medium">{formatCurrency(bill.total_amount || 0)}</div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="text-sm">{formatCurrency(bill.discount || 0)}</div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+
+                            {/* Pagination */}
+                            {pagination && pagination.count > 0 && (
+                                <div className="border-t pt-4 mt-4">
+                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                                        <div className="text-sm text-muted-foreground">
+                                            Showing{' '}
+                                            <span className="font-medium">
+                                                {pagination.count > 0 ? ((pagination.current_page - 1) * pagination.page_size) + 1 : 0}
+                                            </span>{' '}
+                                            to{' '}
+                                            <span className="font-medium">
+                                                {Math.min(pagination.current_page * pagination.page_size, pagination.count)}
+                                            </span>{' '}
+                                            of{' '}
+                                            <span className="font-medium">{pagination.count}</span>{' '}
+                                            bills
+                                        </div>
+
+                                        <Pagination>
+                                            <PaginationContent>
+                                                <PaginationItem>
+                                                    <PaginationLink
+                                                        href="#"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            setCurrentPage(1);
+                                                        }}
+                                                        className={pagination.current_page === 1 ? 'pointer-events-none opacity-50' : ''}
+                                                        aria-label="First page"
+                                                    >
+                                                        <ChevronsLeft className="h-4 w-4" />
+                                                    </PaginationLink>
+                                                </PaginationItem>
+                                                <PaginationItem>
+                                                    <PaginationPrevious
+                                                        href="#"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            if (pagination.current_page > 1) setCurrentPage(pagination.current_page - 1);
+                                                        }}
+                                                        className={!pagination.previous || pagination.current_page === 1 ? 'pointer-events-none opacity-50' : ''}
+                                                    />
+                                                </PaginationItem>
+                                                
+                                                {/* Page Numbers */}
+                                                {(() => {
+                                                    const MAX_PAGES_TO_SHOW = 5;
+                                                    let start = Math.max(pagination.current_page - Math.floor(MAX_PAGES_TO_SHOW / 2), 1);
+                                                    const end = Math.min(start + MAX_PAGES_TO_SHOW - 1, pagination.total_pages);
+                                                    if (end - start < MAX_PAGES_TO_SHOW - 1) {
+                                                        start = Math.max(end - MAX_PAGES_TO_SHOW + 1, 1);
+                                                    }
+                                                    return Array.from({ length: end - start + 1 }, (_, i) => start + i).map(
+                                                        (pageNum) => (
+                                                            <PaginationItem key={pageNum}>
+                                                                <PaginationLink
+                                                                    href="#"
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        setCurrentPage(pageNum);
+                                                                    }}
+                                                                    isActive={pagination.current_page === pageNum}
+                                                                >
+                                                                    {pageNum}
+                                                                </PaginationLink>
+                                                            </PaginationItem>
+                                                        )
+                                                    );
+                                                })()}
+
+                                                {pagination.total_pages > 5 && pagination.current_page + 2 < pagination.total_pages && (
+                                                    <PaginationItem>
+                                                        <PaginationEllipsis />
+                                                    </PaginationItem>
+                                                )}
+
+                                                <PaginationItem>
+                                                    <PaginationNext
+                                                        href="#"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            if (pagination.current_page < pagination.total_pages) setCurrentPage(pagination.current_page + 1);
+                                                        }}
+                                                        className={!pagination.next || pagination.current_page === pagination.total_pages ? 'pointer-events-none opacity-50' : ''}
+                                                    />
+                                                </PaginationItem>
+                                                <PaginationItem>
+                                                    <PaginationLink
+                                                        href="#"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            setCurrentPage(pagination.total_pages);
+                                                        }}
+                                                        className={pagination.current_page === pagination.total_pages ? 'pointer-events-none opacity-50' : ''}
+                                                        aria-label="Last page"
+                                                    >
+                                                        <ChevronsRight className="h-4 w-4" />
+                                                    </PaginationLink>
+                                                </PaginationItem>
+                                            </PaginationContent>
+                                        </Pagination>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </CardContent>
             </Card>
         </div>

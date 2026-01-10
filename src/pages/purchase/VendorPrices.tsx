@@ -88,6 +88,7 @@ export default function VendorPrices() {
     const [vendorsLoading, setVendorsLoading] = useState(false);
     const [productsLoading, setProductsLoading] = useState(false);
     const [selectedProductForAdd, setSelectedProductForAdd] = useState<string>("");
+    const [selectedVendorForAdd, setSelectedVendorForAdd] = useState<string>("");
 
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
@@ -113,9 +114,15 @@ export default function VendorPrices() {
         }
     }, []);
 
+    // Load vendors and products when Add Dialog opens
     useEffect(() => {
-        if (isAddDialogOpen && products.length === 0 && !productsLoading) {
-            fetchProducts();
+        if (isAddDialogOpen) {
+            if (vendors.length === 0 && !vendorsLoading) {
+                fetchVendors();
+            }
+            if (products.length === 0 && !productsLoading) {
+                fetchProducts();
+            }
         }
     }, [isAddDialogOpen]);
 
@@ -129,8 +136,8 @@ export default function VendorPrices() {
                 page_size: pageSize,
             };
 
-            // Add filters (only if not "all")
-            if (filterVendor !== "all") {
+            // Add filters (only if not "all" and not "with_history")
+            if (filterVendor !== "all" && filterVendor !== "with_history") {
                 params.vendor = filterVendor;
             }
             if (filterActive !== "all") {
@@ -183,9 +190,14 @@ export default function VendorPrices() {
         try {
             setVendorsLoading(true);
             const vendorsResponse = await purchaseApi.vendors.list();
-            setVendors(Array.isArray(vendorsResponse) ? vendorsResponse : []);
+            // Handle paginated response
+            const vendorsList = Array.isArray(vendorsResponse) 
+                ? vendorsResponse 
+                : (vendorsResponse?.results || []);
+            setVendors(vendorsList);
         } catch (error) {
             console.error('Failed to fetch vendors:', error);
+            toast.error('Failed to load vendors');
         } finally {
             setVendorsLoading(false);
         }
@@ -258,14 +270,14 @@ export default function VendorPrices() {
     };
 
     const handleAdd = async () => {
-        if (!editForm.purchase_price || !filterVendor || filterVendor === "all" || !selectedProductForAdd) {
+        if (!editForm.purchase_price || !selectedVendorForAdd || !selectedProductForAdd) {
             toast.error('Please select vendor and product, and enter price');
             return;
         }
 
         try {
             await purchaseApi.vendorProductPrices.create({
-                vendor: parseInt(filterVendor),
+                vendor: parseInt(selectedVendorForAdd),
                 product_id: selectedProductForAdd,
                 purchase_price: parseFloat(editForm.purchase_price),
                 minimum_order_quantity: parseFloat(editForm.minimum_order_quantity),
@@ -278,6 +290,7 @@ export default function VendorPrices() {
             toast.success('Vendor price added successfully');
             setIsAddDialogOpen(false);
             setSelectedProductForAdd("");
+            setSelectedVendorForAdd("");
             setEditForm({
                 purchase_price: "",
                 minimum_order_quantity: "1",
@@ -436,19 +449,42 @@ export default function VendorPrices() {
     };
 
     // Group prices by product (server already returns filtered/paginated data)
+    // Filter to show only products with multiple vendors if "with_history" filter is selected
     const pricesByProduct = useMemo(() => {
-        return filteredPrices.reduce((acc, price) => {
+        const grouped = filteredPrices.reduce((acc, price) => {
             if (!acc[price.product_id]) {
                 acc[price.product_id] = [];
             }
             acc[price.product_id].push(price);
             return acc;
         }, {} as Record<string, VendorProductPrice[]>);
-    }, [filteredPrices]);
+
+        // If "with_history" filter is selected, only show products with multiple vendors
+        if (filterVendor === "with_history") {
+            const filtered: Record<string, VendorProductPrice[]> = {};
+            Object.entries(grouped).forEach(([productId, prices]) => {
+                if (prices.length > 1) {
+                    filtered[productId] = prices;
+                }
+            });
+            return filtered;
+        }
+
+        return grouped;
+    }, [filteredPrices, filterVendor]);
 
     // Calculate pagination from server response
     const totalProducts = Object.keys(pricesByProduct).length;
-    const totalPages = Math.ceil(totalCount / pageSize);
+    
+    // When "with_history" filter is active, adjust total count to reflect filtered products
+    const displayTotalCount = useMemo(() => {
+        if (filterVendor === "with_history") {
+            return Object.values(pricesByProduct).reduce((sum, prices) => sum + prices.length, 0);
+        }
+        return totalCount;
+    }, [pricesByProduct, filterVendor, totalCount]);
+    
+    const totalPages = Math.ceil(displayTotalCount / pageSize);
 
     if (loading) {
         return (
@@ -502,6 +538,7 @@ export default function VendorPrices() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Vendors</SelectItem>
+                                <SelectItem value="with_history">With History (Multiple Vendors)</SelectItem>
                                 {vendors.map((vendor) => (
                                     <SelectItem key={vendor.id} value={vendor.id.toString()}>
                                         {vendor.name}
@@ -528,7 +565,12 @@ export default function VendorPrices() {
                 <CardHeader className="p-3 pb-2">
                     <div className="flex items-center justify-between">
                         <CardTitle className="text-sm font-semibold">
-                            {totalCount > 0 ? `${totalCount} Total` : 'No'} Vendor Prices
+                            {displayTotalCount > 0 ? `${displayTotalCount} Total` : 'No'} Vendor Prices
+                            {filterVendor === "with_history" && (
+                                <span className="text-xs font-normal text-blue-600 ml-2">
+                                    (Showing products with multiple vendors)
+                                </span>
+                            )}
                             {totalPages > 1 && (
                                 <span className="text-xs font-normal text-gray-500 ml-2">
                                     (Page {currentPage} of {totalPages})
@@ -654,7 +696,8 @@ export default function VendorPrices() {
                             {totalPages > 1 && (
                                 <div className="flex items-center justify-between mt-4 pt-3 border-t">
                                     <div className="text-xs text-gray-500">
-                                        Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount} vendor prices
+                                        Showing {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, displayTotalCount)} of {displayTotalCount} vendor prices
+                                        {filterVendor === "with_history" && " (multiple vendors per product)"}
                                     </div>
                                     <div className="flex items-center space-x-2">
                                         <Button
@@ -822,16 +865,26 @@ export default function VendorPrices() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label>Vendor *</Label>
-                                <Select value={filterVendor} onValueChange={setFilterVendor}>
+                                <Select 
+                                    value={selectedVendorForAdd} 
+                                    onValueChange={setSelectedVendorForAdd}
+                                    disabled={vendorsLoading}
+                                >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Select vendor" />
+                                        <SelectValue placeholder={vendorsLoading ? "Loading vendors..." : "Select vendor"} />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {vendors.map((vendor) => (
-                                            <SelectItem key={vendor.id} value={vendor.id.toString()}>
-                                                {vendor.name}
-                                            </SelectItem>
-                                        ))}
+                                        {vendorsLoading ? (
+                                            <div className="p-2 text-sm text-muted-foreground">Loading vendors...</div>
+                                        ) : vendors.length === 0 ? (
+                                            <div className="p-2 text-sm text-muted-foreground">No vendors available</div>
+                                        ) : (
+                                            vendors.map((vendor) => (
+                                                <SelectItem key={vendor.id} value={vendor.id.toString()}>
+                                                    {vendor.name}
+                                                </SelectItem>
+                                            ))
+                                        )}
                                     </SelectContent>
                                 </Select>
                             </div>

@@ -781,28 +781,37 @@ export interface PurchaseBillItem {
 
 export interface PurchasePayment {
   id: number;
-  bill?: {
+  bill?: number | {
     id: number;
     bill_number: string;
     vendor: {
       name: string;
     };
   };
-  vendor?: {
+  vendor?: number | {
     id: number;
     name: string;
   };
-  amount: number;
+  amount: number | string;
   payment_date: string;
-  mode: 'Cash' | 'Bank' | 'UPI' | 'Credit';
-  note: string;
+  mode: 'Cash' | 'Bank' | 'UPI' | 'Credit' | string;
+  note?: string;
   attachment?: string;
-  allocated_amount: number;
-  unallocated_amount: number;
+  allocated_amount?: number | string;
+  unallocated_amount?: number | string;
   created_at: string;
   allocations?: PaymentAllocation[];
   bill_number?: string;
   vendor_name?: string;
+  bill_calculation?: {
+    old_paid_amount?: number;
+    new_paid_amount?: number;
+    old_outstanding_amount?: number;
+    new_outstanding_amount?: number;
+    total_amount?: number;
+    discount?: number;
+    payment_count?: number;
+  };
 }
 
 export interface PaymentAllocation {
@@ -889,7 +898,17 @@ export const purchaseApi = {
 
   // Bills
   bills: {
-    list: (params?: Record<string, any>) => purchaseApiBase.get<PurchaseBill[]>('/bills/'),
+    list: (params?: Record<string, any>) => {
+      const queryString = params ? '?' + new URLSearchParams(
+        Object.entries(params).reduce((acc, [key, value]) => {
+          if (value !== undefined && value !== null) {
+            acc[key] = String(value);
+          }
+          return acc;
+        }, {} as Record<string, string>)
+      ).toString() : '';
+      return purchaseApiBase.get<any>('/bills/' + queryString);
+    },
     get: (id: number) => purchaseApiBase.get<PurchaseBill>(`/bills/${id}/`),
     create: (data: any) => purchaseApiBase.post<PurchaseBill>('/bills/', data),
     update: (id: number, data: Partial<PurchaseBill>) => purchaseApiBase.put<PurchaseBill>(`/bills/${id}/`, data),
@@ -907,9 +926,25 @@ export const purchaseApi = {
 
   // Payments
   payments: {
-    list: (params?: Record<string, any>) => purchaseApiBase.get<PurchasePayment[]>('/payments/'),
+    list: (params?: Record<string, any>) => {
+      const queryString = params ? '?' + new URLSearchParams(
+        Object.entries(params).reduce((acc, [key, value]) => {
+          if (value !== undefined && value !== null) {
+            acc[key] = String(value);
+          }
+          return acc;
+        }, {} as Record<string, string>)
+      ).toString() : '';
+      return purchaseApiBase.get<any>('/payments/' + queryString);
+    },
     get: (id: number) => purchaseApiBase.get<PurchasePayment>(`/payments/${id}/`),
-    create: (data: any) => purchaseApiBase.post<PurchasePayment>('/payments/', data),
+    create: (data: any) => {
+      // Handle FormData for file uploads
+      if (data instanceof FormData) {
+        return purchaseApiBase.postForm<PurchasePayment>('/payments/', data);
+      }
+      return purchaseApiBase.post<PurchasePayment>('/payments/', data);
+    },
     update: (id: number, data: Partial<PurchasePayment>) => purchaseApiBase.put<PurchasePayment>(`/payments/${id}/`, data),
     delete: (id: number) => purchaseApiBase.del(`/payments/${id}/`),
     summary: () => purchaseApiBase.get('/payments/summary/'),

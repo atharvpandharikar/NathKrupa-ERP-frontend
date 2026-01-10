@@ -204,7 +204,7 @@ export function useOptimizedQuotations(page = 1, pageSize = 20, searchTerm = '')
                 } else {
                     const searchParam = '';
                     const response = await api.get<any>(
-                        `/quotations/?page=${page}&page_size=${pageSize}${searchParam}&fields=id,quotation_number,customer,vehicle_maker,vehicle_model,status,final_total,created_at`
+                        `/quotations/?page=${page}&page_size=${pageSize}${searchParam}`
                     );
 
                     setQuotations(response.results || response);

@@ -17,6 +17,458 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft, Printer, Play, CreditCard, Eye, Plus, Truck, Loader2, Upload, Images, FileText, X, MessageCircle } from "lucide-react";
 import { runWithConcurrencyDetailed, maybeCompressImage } from "@/lib/utils";
 
+// Bill PDF Generation Function
+async function generateBillPDF(billData: any) {
+  const { jsPDF } = await import('jspdf');
+  const autoTable = (await import('jspdf-autotable')).default;
+  
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  const contentWidth = pageWidth - (margin * 2);
+  let currentY = margin;
+  
+  // Ensure we don't exceed page height
+  const minBottomMargin = 60; // Space needed for footer, bank details, signature
+
+  // Colors from the design
+  const darkBlue = [0, 51, 102]; // #003366
+  const orange = [255, 140, 0]; // #FF8C00
+  const lightGray = [245, 245, 245];
+  const borderGray = [200, 200, 200];
+
+  // Helper function to convert number to words (Indian numbering system)
+  function numberToWords(num: number): string {
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 
+                  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    
+    function convertHundreds(n: number): string {
+      if (n === 0) return '';
+      if (n < 20) return ones[n];
+      if (n < 100) {
+        const ten = Math.floor(n / 10);
+        const one = n % 10;
+        return tens[ten] + (one > 0 ? ' ' + ones[one] : '');
+      }
+      const hundred = Math.floor(n / 100);
+      const remainder = n % 100;
+      return ones[hundred] + ' Hundred' + (remainder > 0 ? ' ' + convertHundreds(remainder) : '');
+    }
+    
+    if (num === 0) return 'Zero';
+    
+    // Handle crores
+    if (num >= 10000000) {
+      const crore = Math.floor(num / 10000000);
+      const remainder = num % 10000000;
+      return convertHundreds(crore) + ' Crore' + (remainder > 0 ? ' ' + numberToWords(remainder) : '');
+    }
+    
+    // Handle lakhs
+    if (num >= 100000) {
+      const lakh = Math.floor(num / 100000);
+      const remainder = num % 100000;
+      return convertHundreds(lakh) + ' Lakh' + (remainder > 0 ? ' ' + numberToWords(remainder) : '');
+    }
+    
+    // Handle thousands
+    if (num >= 1000) {
+      const thousand = Math.floor(num / 1000);
+      const remainder = num % 1000;
+      return convertHundreds(thousand) + ' Thousand' + (remainder > 0 ? ' ' + convertHundreds(remainder) : '');
+    }
+    
+    return convertHundreds(num);
+  }
+
+  // Format currency
+  const formatCurrency = (amount: number | string) => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return new Intl.NumberFormat('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(num || 0);
+  };
+
+  // Format date
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  // ===== HEADER SECTION =====
+  // Company Logo Area (left side) - 25mm x 25mm
+  doc.setFillColor(...darkBlue);
+  doc.rect(margin, currentY, 25, 25, 'F');
+  
+  // Draw NB logo (simplified - just text for now)
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text('NB', margin + 12.5, currentY + 15, { align: 'center' });
+
+  // Company Name and Details (right side of logo)
+  doc.setTextColor(...darkBlue);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  const companyNameX = margin + 28;
+  doc.text('NATHKRUPA BODY BUILDER', companyNameX, currentY + 8);
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text('AND AUTO ACCESSORIES', companyNameX, currentY + 14);
+  
+  // Business description in oval shape (simulated with rounded rectangle)
+  doc.setFontSize(7);
+  doc.setDrawColor(...darkBlue);
+  doc.setLineWidth(0.5);
+  const ovalWidth = 75;
+  const ovalHeight = 7;
+  const ovalX = companyNameX;
+  const ovalY = currentY + 17;
+  doc.roundedRect(ovalX, ovalY, ovalWidth, ovalHeight, 3, 3, 'S');
+  
+  // Split text into two lines for better fit
+  const businessDesc = 'All Kind of Accessories and Body Parts Original Body Dealers';
+  const textLines = doc.splitTextToSize(businessDesc, ovalWidth - 4);
+  const lineHeight = 3;
+  const startTextY = ovalY + (ovalHeight / 2) - ((textLines.length - 1) * lineHeight / 2) + 2;
+  
+  doc.setTextColor(...darkBlue);
+  doc.setFont('helvetica', 'normal');
+  textLines.forEach((line: string, index: number) => {
+    doc.text(line, ovalX + ovalWidth / 2, startTextY + (index * lineHeight), { align: 'center' });
+  });
+
+  currentY += 28;
+
+  // Company Address and Contact Info
+  doc.setFontSize(9);
+  doc.setTextColor(0, 0, 0);
+  const companyAddress = billData.company?.address || 'Gat No. 379, Gavhanewadi, Pune-Nagar Road, Tal. Shrigonda, Dist. Ahmednagar';
+  doc.text(companyAddress, margin, currentY);
+  currentY += 5;
+  
+  const mobile = billData.company?.mobile || '9850523224';
+  const gstin = billData.company?.gstin || '27AHXPT3625N1ZB';
+  const email = billData.company?.email || 'contact@nathkrupabody.com';
+  
+  doc.setFontSize(8);
+  doc.text(`Mobile: ${mobile}`, margin, currentY);
+  doc.text(`GSTIN: ${gstin}`, margin + 55, currentY);
+  doc.text(`Email: ${email}`, margin + 110, currentY);
+  currentY += 7;
+
+  // ===== BILL INFO SECTION =====
+  // Draw border around bill info
+  doc.setDrawColor(...borderGray);
+  doc.setLineWidth(0.5);
+  const billInfoHeight = 32;
+  doc.rect(margin, currentY, contentWidth, billInfoHeight, 'S');
+  
+  const billInfoY = currentY + 4;
+  const leftColX = margin + 4;
+  const rightColX = margin + contentWidth / 2 + 4;
+  const dividerX = margin + contentWidth / 2;
+
+  // Left Column - Customer Details
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('M/s.:', leftColX, billInfoY);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const customerName = billData.customer?.name || billData.customer_name || billData.quotation?.customer?.name || 'N/A';
+  doc.text(customerName, leftColX + 12, billInfoY, { maxWidth: dividerX - leftColX - 15 });
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Address:', leftColX, billInfoY + 5.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const customerAddress = billData.customer?.address || billData.customer_address || 'N/A';
+  doc.text(customerAddress, leftColX + 12, billInfoY + 5.5, { maxWidth: dividerX - leftColX - 15 });
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Place of Supply:', leftColX, billInfoY + 11);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(billData.place_of_supply || 'None', leftColX + 28, billInfoY + 11);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('GSTIN No.:', leftColX, billInfoY + 16.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const customerGstin = billData.customer?.gstin || billData.customer_gstin || 'None';
+  doc.text(customerGstin, leftColX + 22, billInfoY + 16.5);
+
+  // Right Column - Invoice Details
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Bill No.:', rightColX, billInfoY);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const billNumber = billData.bill_number || billData.bill_no || 'N/A';
+  doc.text(billNumber, rightColX + 18, billInfoY);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Date:', rightColX, billInfoY + 5.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(formatDate(billData.bill_date || billData.date || new Date().toISOString()), rightColX + 18, billInfoY + 5.5);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Vehicle:', rightColX, billInfoY + 11);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const vehicleName = billData.vehicle?.name || billData.vehicle_name || billData.vehicle_model || billData.quotation?.vehicle_model?.name || 'N/A';
+  doc.text(vehicleName, rightColX + 18, billInfoY + 11);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Vehicle No.:', rightColX, billInfoY + 16.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(billData.vehicle_number || billData.vehicle_no || billData.quotation?.vehicle_number || 'None', rightColX + 23, billInfoY + 16.5);
+
+  // Vertical divider line
+  doc.setLineWidth(0.3);
+  doc.line(dividerX, currentY, dividerX, currentY + billInfoHeight);
+
+  currentY += billInfoHeight + 5;
+
+  // ===== ITEMS TABLE =====
+  // Table headers
+  const tableHeaders = [['Sr.No', 'Particulars', 'HSN Code', 'Qty.', 'Rate', 'Amount']];
+  
+  // Prepare table data
+  const items = billData.items || billData.features || billData.quotation?.features || [];
+  const tableData = items.map((item: any, index: number) => [
+    (index + 1).toString(),
+    item.name || item.particulars || item.feature_name || item.custom_name || 'N/A',
+    item.hsn_code || item.hsn || '',
+    (item.quantity || item.qty || '0').toString(),
+    formatCurrency(item.unit_price || item.rate || 0),
+    formatCurrency(item.total || item.amount || item.total_price || 0)
+  ]);
+
+  // Calculate column widths to fit content width (180mm total)
+  const colWidths = {
+    srNo: 12,
+    particulars: 85,
+    hsn: 20,
+    qty: 18,
+    rate: 22,
+    amount: 23
+  };
+  // Total: 12 + 85 + 20 + 18 + 22 + 23 = 180mm (fits in contentWidth)
+
+  // Generate table
+  autoTable(doc, {
+    head: tableHeaders,
+    body: tableData.length > 0 ? tableData : [['1', 'No items', '', '', '', '']],
+    startY: currentY,
+    margin: { left: margin, right: margin },
+    styles: {
+      fontSize: 8,
+      cellPadding: 2.5,
+      overflow: 'linebreak',
+      lineColor: [200, 200, 200],
+      lineWidth: 0.3,
+      textColor: [0, 0, 0]
+    },
+    headStyles: {
+      fillColor: [240, 240, 240],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'center',
+      lineColor: [200, 200, 200],
+      lineWidth: 0.5
+    },
+    bodyStyles: {
+      lineColor: [200, 200, 200],
+      lineWidth: 0.3,
+      fontSize: 8
+    },
+    columnStyles: {
+      0: { cellWidth: colWidths.srNo, halign: 'center' }, // Sr.No
+      1: { cellWidth: colWidths.particulars, halign: 'left' }, // Particulars
+      2: { cellWidth: colWidths.hsn, halign: 'center' }, // HSN Code
+      3: { cellWidth: colWidths.qty, halign: 'center' }, // Qty.
+      4: { cellWidth: colWidths.rate, halign: 'right' }, // Rate
+      5: { cellWidth: colWidths.amount, halign: 'right' } // Amount
+    },
+    theme: 'plain',
+    showHead: 'everyPage',
+    didDrawPage: (data: any) => {
+      // Draw watermark on each page behind the table (very light)
+      doc.setGState(doc.GState({ opacity: 0.05 }));
+      doc.setTextColor(180, 180, 180);
+      doc.setFontSize(100);
+      doc.setFont('helvetica', 'bold');
+      const watermarkY = pageHeight / 2;
+      doc.text('NB', pageWidth / 2, watermarkY, { align: 'center' });
+      doc.setGState(doc.GState({ opacity: 1.0 }));
+      doc.setTextColor(0, 0, 0);
+    }
+  });
+
+  const finalTableY = (doc as any).lastAutoTable.finalY || currentY + 50;
+  currentY = finalTableY + 8;
+  
+  // Check if we need a new page for summary
+  if (currentY + 50 > pageHeight - minBottomMargin) {
+    doc.addPage();
+    currentY = margin;
+  }
+
+  // ===== FINANCIAL SUMMARY =====
+  // Calculate total from items if not provided
+  let totalAmount = parseFloat(billData.total_amount || billData.grand_total || billData.quoted_price || billData.final_total || billData.quotation?.final_total || billData.quotation?.suggested_total || 0);
+  if (totalAmount === 0 && items.length > 0) {
+    totalAmount = items.reduce((sum: number, item: any) => {
+      return sum + parseFloat(item.total || item.amount || item.total_price || 0);
+    }, 0);
+  }
+  
+  const discount = parseFloat(billData.discount || billData.total_discount_amount || 0);
+  const cgstPercent = parseFloat(billData.cgst_percent || billData.cgst || 9);
+  const sgstPercent = parseFloat(billData.sgst_percent || billData.sgst || 9);
+  
+  // GST is typically calculated on the amount after discount
+  const taxableAmount = totalAmount - discount;
+  const cgstAmount = (taxableAmount * cgstPercent) / 100;
+  const sgstAmount = (taxableAmount * sgstPercent) / 100;
+  const grandTotal = taxableAmount + cgstAmount + sgstAmount;
+
+  // Summary box - positioned on the right side
+  const summaryWidth = 60;
+  const summaryX = pageWidth - margin - summaryWidth;
+  const summaryHeight = 38;
+
+  doc.setDrawColor(...borderGray);
+  doc.setLineWidth(0.5);
+  doc.rect(summaryX, currentY, summaryWidth, summaryHeight, 'S');
+
+  let summaryY = currentY + 4;
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+
+  doc.text('Total Amount:', summaryX + 2, summaryY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Rs. ${formatCurrency(totalAmount)}`, summaryX + summaryWidth - 2, summaryY, { align: 'right' });
+  summaryY += 4.5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.text('Discount:', summaryX + 2, summaryY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Rs. ${formatCurrency(discount)}`, summaryX + summaryWidth - 2, summaryY, { align: 'right' });
+  summaryY += 4.5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(`CGST (${cgstPercent}%):`, summaryX + 2, summaryY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Rs. ${formatCurrency(cgstAmount)}`, summaryX + summaryWidth - 2, summaryY, { align: 'right' });
+  summaryY += 4.5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(`SGST (${sgstPercent}%):`, summaryX + 2, summaryY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Rs. ${formatCurrency(sgstAmount)}`, summaryX + summaryWidth - 2, summaryY, { align: 'right' });
+  summaryY += 4.5;
+
+  doc.setDrawColor(...darkBlue);
+  doc.setLineWidth(0.8);
+  doc.line(summaryX + 2, summaryY, summaryX + summaryWidth - 2, summaryY);
+  summaryY += 4.5;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('G. TOTAL:', summaryX + 2, summaryY);
+  doc.text(`Rs. ${formatCurrency(grandTotal)}`, summaryX + summaryWidth - 2, summaryY, { align: 'right' });
+  summaryY += 5;
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  const amountInWords = numberToWords(Math.floor(grandTotal));
+  doc.text(`Rs. in Words: ${amountInWords} Only`, summaryX + 2, summaryY, { maxWidth: summaryWidth - 4 });
+
+  currentY = Math.max(currentY + summaryHeight, summaryY + 8);
+
+  // ===== BANK DETAILS AND SIGNATURE SECTION =====
+  // Ensure we have enough space at bottom
+  const bottomSectionY = Math.min(currentY + 10, pageHeight - 55);
+  
+  // Bank Details (Left)
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Bank Details', margin, bottomSectionY);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  const bankName = billData.bank?.name || billData.bank_name || 'Bank of Maharashtra, Shirur';
+  doc.text(`Bank & Branch: ${bankName}`, margin, bottomSectionY + 5);
+  const accountNumber = billData.bank?.account_number || billData.account_number || '60271451322';
+  doc.text(`Account No.: ${accountNumber}`, margin, bottomSectionY + 10);
+  const ifscCode = billData.bank?.ifsc || billData.ifsc_code || 'MAHB0000254';
+  doc.text(`IFSC Code: ${ifscCode}`, margin, bottomSectionY + 15);
+
+  // Signature Section (Right)
+  const signatureX = pageWidth - margin - 55;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Received Sign.', signatureX, bottomSectionY);
+  doc.line(signatureX, bottomSectionY + 2, signatureX + 50, bottomSectionY + 2);
+  
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('NATHKRUPA BODY BUILDER', signatureX, bottomSectionY + 8, { maxWidth: 55 });
+  doc.setFontSize(7);
+  doc.text('AND AUTO ACCESSORIES', signatureX, bottomSectionY + 12, { maxWidth: 55 });
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Authorised Signatory', signatureX, bottomSectionY + 18);
+  doc.line(signatureX, bottomSectionY + 20, signatureX + 50, bottomSectionY + 20);
+
+  // ===== FOOTER =====
+  const footerY = pageHeight - 12;
+  doc.setFillColor(...orange);
+  doc.rect(0, footerY, pageWidth, 12, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  
+  const website = billData.company?.website || 'www.nathkrupa.com';
+  
+  doc.text(`Email: ${email}`, margin, footerY + 4);
+  doc.text(`Mobile: ${mobile}`, margin + 50, footerY + 4);
+  doc.text(`Website: ${website}`, margin + 100, footerY + 4);
+  
+  // Page number
+  doc.text('1/1', pageWidth - margin - 5, footerY + 4, { align: 'right' });
+
+  // Save PDF
+  const filename = `Bill_${billNumber}.pdf`;
+  doc.save(filename);
+}
+
 // NOTE: backend status is 'workdone' (no underscore) – align constants
 const STATUS_ORDER = ["scheduled", "in_progress", "completed", "cancelled"] as const;
 const STATUS_LABELS: Record<string, string> = { scheduled: "Scheduled", in_progress: "In Process", completed: "Completed", cancelled: "Cancelled" };
@@ -417,15 +869,25 @@ export default function WorkOrderDetails() {
               try {
                 const url = `${API_ROOT}/api/manufacturing/bills/${workOrder.id}/bill_print/`;
                 const tokens = getTokens();
-                const res = await fetch(url, { headers: tokens?.access ? { Authorization: `Bearer ${tokens.access}` } : {} });
+                const res = await fetch(url, { 
+                  headers: { 
+                    ...(tokens?.access ? { Authorization: `Bearer ${tokens.access}` } : {}),
+                    'Accept': 'application/json'
+                  } 
+                });
                 if (!res.ok) {
                   const t = await res.text();
                   toast({ title: 'Print failed', description: t || `HTTP ${res.status}`, variant: 'destructive' });
                   return;
                 }
-                const blob = await res.blob();
-                const blobUrl = URL.createObjectURL(blob);
-                window.open(blobUrl, '_blank', 'noopener');
+                
+                // Get JSON data from API
+                const billData = await res.json();
+                
+                // Generate PDF from JSON data
+                await generateBillPDF(billData);
+                
+                toast({ title: 'Success', description: 'Bill PDF generated successfully' });
               } catch (e: any) {
                 console.error(e);
                 toast({ title: 'Print error', description: e?.message || 'Unexpected error', variant: 'destructive' });

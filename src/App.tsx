@@ -24,6 +24,7 @@ const LazyBillDetails = React.lazy(() => import("./pages/bills/Details"));
 const LazyWorkOrdersList = React.lazy(() => import("./pages/workorders/List"));
 const LazyWorkOrderDetails = React.lazy(() => import("./pages/workorders/Details"));
 const LazyConvertToBills = React.lazy(() => import("./pages/workorders/ConvertToBills"));
+const LazyCreateWorkOrder = React.lazy(() => import("./pages/workorders/Create"));
 const LazyBillsList = React.lazy(() => import("./pages/bills/List"));
 const LazyCreateBill = React.lazy(() => import("./pages/bills/CreateBill"));
 const LazyTestModeManagement = React.lazy(() => import("./pages/bills/TestModeManagement"));
@@ -55,6 +56,8 @@ const LazyPurchaseBills = React.lazy(() => import("./pages/purchase/Bills"));
 const LazyPurchaseBillDetail = React.lazy(() => import("./pages/purchase/BillDetail"));
 const LazyPurchaseNewBill = React.lazy(() => import("./pages/purchase/NewBill"));
 const LazyPurchasePayments = React.lazy(() => import("./pages/purchase/Payments"));
+const LazyNewPayment = React.lazy(() => import("./pages/purchase/NewPayment"));
+const LazyPaymentDetail = React.lazy(() => import("./pages/purchase/PaymentDetail"));
 const LazyVendorPayments = React.lazy(() => import("./pages/purchase/VendorPayments"));
 const LazyPurchaseReports = React.lazy(() => import("./pages/purchase/Reports"));
 const LazyPurchaseSettings = React.lazy(() => import("./pages/purchase/Settings"));
@@ -215,6 +218,7 @@ const App = () => {
                     <Route path="/quotations/generate" element={<LazyQuotationGenerate />} />
                     <Route path="/quotations/:id" element={<LazyQuotationDetails />} />
                     <Route path="/work-orders" element={<LazyWorkOrdersList />} />
+                    <Route path="/work-orders/create" element={<LazyCreateWorkOrder />} />
                     <Route path="/work-orders/:id" element={<LazyWorkOrderDetails />} />
                     <Route path="/work-orders/convert-to-bills" element={<LazyConvertToBills />} />
                     <Route path="/bills" element={<LazyBillsList />} />
@@ -248,6 +252,8 @@ const App = () => {
                     <Route path="/purchase/bills/new" element={<LazyPurchaseNewBill />} />
                     <Route path="/purchase/bills/:id" element={<LazyPurchaseBillDetail />} />
                     <Route path="/purchase/payments" element={<LazyPurchasePayments />} />
+                    <Route path="/purchase/payments/new" element={<LazyNewPayment />} />
+                    <Route path="/purchase/payments/:id" element={<LazyPaymentDetail />} />
                     <Route path="/purchase/vendor-payments" element={<LazyVendorPayments />} />
                     <Route path="/purchase/reports" element={<LazyPurchaseReports />} />
                     <Route path="/purchase/settings" element={<LazyPurchaseSettings />} />

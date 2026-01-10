@@ -175,10 +175,12 @@ export default function WorkOrdersList() {
               Convert to Bills
             </Button>
           </Link>
-          <Button size="sm" className="gap-1">
-            <Plus className="h-4 w-4" />
-            Create Project
-          </Button>
+          <Link to="/work-orders/create">
+            <Button size="sm" className="gap-1">
+              <Plus className="h-4 w-4" />
+              Create Project
+            </Button>
+          </Link>
           <Button variant="outline" size="sm">
             <Settings className="h-4 w-4" />
           </Button>

@@ -25,8 +25,11 @@ type QuoteRow = {
   quotation_date: string;
   status: string;
   customer?: { name: string; phone_number?: string } | null;
+  customer_name?: string; // Flat format from API
+  customer_phone?: string; // Flat format from API
   vehicle_maker?: { name: string } | null;
   vehicle_model?: { name: string } | null;
+  vehicle_model_name?: string; // Flat format from API
   // unified total from backend
   display_total?: number | string | null;
 };
@@ -297,24 +300,38 @@ export default function QuotationsList() {
                             <div className="font-medium">{quote.customer.name}</div>
                             <div className="text-sm text-muted-foreground">{quote.customer.phone_number}</div>
                           </div>
+                        ) : quote.customer_name ? (
+                          <div>
+                            <div className="font-medium">{quote.customer_name}</div>
+                            {quote.customer_phone && (
+                              <div className="text-sm text-muted-foreground">{quote.customer_phone}</div>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-muted-foreground italic">No customer</span>
                         )}
                       </td>
                       <td className="p-3">
                         <div className="text-sm">
-                          {quote.vehicle_maker?.name} {quote.vehicle_model?.name}
+                          {quote.vehicle_model_name || (
+                            <>
+                              {quote.vehicle_maker?.name} {quote.vehicle_model?.name}
+                            </>
+                          )}
                         </div>
                       </td>
                       <td className="p-3">
                         <span className="font-bold text-green-600">₹{(() => {
-                          const raw = (typeof quote.display_total !== 'undefined' && quote.display_total !== null)
+                          // Priority: final_total > display_total > suggested_total
+                          const raw = (typeof quote.final_total !== 'undefined' && quote.final_total !== null)
+                            ? quote.final_total
+                            : (typeof quote.display_total !== 'undefined' && quote.display_total !== null)
                             ? quote.display_total
                             : quote.suggested_total;
                           const n = typeof raw === 'string' ? parseFloat(raw) : (raw || 0);
-                          return n.toLocaleString();
+                          return isNaN(n) ? '0' : n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
                         })()}</span>
-                        {typeof quote.final_total !== 'undefined' && quote.final_total !== null && (Number(quote.final_total) < Number(quote.suggested_total)) && (
+                        {typeof quote.final_total !== 'undefined' && quote.final_total !== null && quote.suggested_total && (Number(quote.final_total) < Number(quote.suggested_total)) && (
                           <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 align-middle">Discount Applied</span>
                         )}
                       </td>
