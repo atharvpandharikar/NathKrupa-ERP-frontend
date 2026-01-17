@@ -111,7 +111,7 @@ export function useOptimizedFeatureCategories() {
 
             try {
                 // Fetch from new endpoint
-                const response = await api.get<any[]>('/feature-categories-list/');
+                const response = await api.get<any>('/feature-categories/');
                 // Extract categories from response structure: { success, count, categories: [...] }
                 let categories: any[] = [];
                 if (Array.isArray(response)) {
@@ -136,7 +136,7 @@ export function useOptimizedFeatureCategories() {
     const refresh = useCallback(async () => {
         dataCache.delete('feature-categories');
         setLoading(true);
-        const response = await api.get<any[]>('/feature-categories-list/');
+        const response = await api.get<any>('/feature-categories/');
         // Extract categories from response structure: { success, count, categories: [...] }
         let categories: any[] = [];
         if (Array.isArray(response)) {
@@ -490,8 +490,8 @@ export function useOptimizedAllFeatureData(page = 1, pageSize = 20) {
                 } else {
                     const [modelsRes, categoriesRes, typesRes] = await Promise.all([
                         api.get<any>('/vehicle-models/?limit=20&offset=0'),
-                        api.get<any>('/feature-categories-list/'),
-                        api.get<any>('/feature-types-list/'),
+                        api.get<any>('/feature-categories/'),
+                        api.get<any>('/feature-types/'),
                     ]);
 
                     models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
@@ -575,7 +575,7 @@ export function useOptimizedFeatureCategoriesPageData(page = 1, pageSize = 20) {
                 }
 
                 // Fetch categories from new endpoint (all categories, then paginate client-side)
-                const categoriesRes = await api.get<any>('/feature-categories-list/');
+                const categoriesRes = await api.get<any>('/feature-categories/');
                 // Extract categories from response structure: { success, count, categories: [...] }
                 let allCategories: any[] = [];
                 if (Array.isArray(categoriesRes)) {
@@ -645,7 +645,7 @@ export function useOptimizedFeatureTypesPageData(page = 1, pageSize = 20) {
                     models = cachedModels;
                 } else {
                     const [categoriesRes, modelsRes] = await Promise.all([
-                        api.get<any>('/feature-categories-list/'),
+                        api.get<any>('/feature-categories/'),
                         api.get<any>('/vehicle-models/?limit=20&offset=0'),
                     ]);
 
@@ -664,7 +664,7 @@ export function useOptimizedFeatureTypesPageData(page = 1, pageSize = 20) {
                 }
 
                 // Fetch types from new endpoint (all types, then paginate client-side)
-                const typesRes = await api.get<any>('/feature-types-list/');
+                const typesRes = await api.get<any>('/feature-types/');
                 // Extract feature types from response structure: { success, count, feature_types: [...] }
                 let allTypes: any[] = [];
                 if (Array.isArray(typesRes)) {

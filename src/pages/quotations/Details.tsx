@@ -161,7 +161,7 @@ export default function QuotationDetails() {
         featureApi.byVehicleModel(vmId, selectedChildCategoryId).then(setFeatureTypes).catch(() => { });
       } else {
         // Fallback: generic feature types by category if model id missing
-        api.get<any>('/feature-types-list/').then((data: any) => {
+        api.get<any>('/feature-types/').then((data: any) => {
           // Extract feature types from response structure: { success, count, feature_types: [...] }
           let allFeatureTypes: any[] = [];
           if (Array.isArray(data)) {

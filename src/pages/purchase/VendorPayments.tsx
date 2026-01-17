@@ -157,7 +157,7 @@ export default function VendorPayments() {
             const matchesSearch = 
                 payment.mode.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 payment.note?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                payment.bill?.bill_number?.toLowerCase().includes(searchTerm.toLowerCase());
+                (typeof payment.bill === 'object' && payment.bill?.bill_number?.toLowerCase().includes(searchTerm.toLowerCase()));
             if (!matchesSearch) return false;
         }
         if (filterMode !== "all") {
@@ -328,13 +328,13 @@ export default function VendorPayments() {
                                             <TableRow key={payment.id} className="hover:bg-muted/50">
                                                 <TableCell>
                                                     <div className="font-medium">
-                                                        {payment.bill?.bill_number || 'N/A'}
+                                                        {(typeof payment.bill === 'object' && payment.bill?.bill_number) || 'N/A'}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center gap-2">
                                                         <FileText className="h-4 w-4 text-gray-400" />
-                                                        {payment.vendor?.name || 'N/A'}
+                                                        {payment.vendor_name || 'N/A'}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
@@ -613,7 +613,7 @@ export default function VendorPayments() {
                                             <Badge className={getModeColor(payment.mode)}>
                                                 {payment.mode.replace('_', ' ').toUpperCase()}
                                             </Badge>
-                                            {payment.bill && (
+                                            {payment.bill && typeof payment.bill === 'object' && (
                                                 <span className="text-sm text-gray-600">
                                                     Bill: {payment.bill.bill_number}
                                                 </span>

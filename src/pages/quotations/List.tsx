@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, FileText, Users, TrendingUp, DollarSign, Printer, MessageCircle } from "lucide-react";
 import { api, API_ROOT, quotationApi } from "@/lib/api";
+import { generateQuotationPDF } from "@/utils/pdfGenerator";
 import { toast } from "@/hooks/use-toast";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useOptimizedQuotations } from "@/hooks/useOptimizedData";
@@ -76,25 +77,16 @@ export default function QuotationsList() {
 
   async function handlePrint(id: number) {
     try {
-      // Using centralized API_ROOT
-      const tokensRaw = localStorage.getItem("nk:tokens");
-      const access = tokensRaw ? (JSON.parse(tokensRaw).access as string) : "";
-      const res = await fetch(`${API_ROOT}/api/manufacturing/quotations/${id}/print/`, {
-        headers: access ? { Authorization: `Bearer ${access}` } : undefined,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const win = window.open(url, '_blank');
-      if (!win) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `quotation-${id}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      // 1. Fetch full quotation details to ensure we have all data (features, customer address, etc.)
+      const res = await api.get<any>(`/quotations/${id}/`);
+      const quotationData = res; // response is the data object directly based on typical api wrapper
+
+      if (!quotationData) throw new Error("Failed to load quotation details");
+
+      // 2. Generate PDF client-side
+      await generateQuotationPDF(quotationData);
+      
+      toast({ title: 'PDF generated successfully' });
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       toast({ title: 'Failed to generate PDF', description: msg, variant: 'destructive' });

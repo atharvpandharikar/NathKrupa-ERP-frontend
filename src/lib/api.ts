@@ -592,7 +592,7 @@ export type QuotationData = { // Export QuotationData
 
 export const featureApi = {
   // Correct hyphenated backend routes
-  byVehicleModel: (vehicle_model_id: number, category_id?: number) => api.get<FeatureType[]>(`/feature-types-list/`).then((data: any) => {
+  byVehicleModel: (vehicle_model_id: number, category_id?: number) => api.get<FeatureType[]>(`/feature-types/`).then((data: any) => {
     // Extract feature types from response structure: { success, count, feature_types: [...] }
     let featureTypes: any[] = [];
     if (Array.isArray(data)) {
@@ -613,7 +613,7 @@ export const featureApi = {
       return matchesVehicleModel && matchesCategory;
     });
   }),
-  parentCategories: () => api.get<FeatureCategory[]>(`/feature-categories-list/`).then((data: any) => {
+  parentCategories: () => api.get<FeatureCategory[]>(`/feature-categories/`).then((data: any) => {
     // Extract categories from response structure: { success, count, categories: [...] }
     let categories: any[] = [];
     if (Array.isArray(data)) {
@@ -626,7 +626,7 @@ export const featureApi = {
     // Filter parent categories (where parent is null)
     return categories.filter((c: any) => c.parent == null || c.parent_id == null);
   }),
-  childCategories: (parent_id: number) => api.get<FeatureCategory[]>(`/feature-categories-list/`).then((data: any) => {
+  childCategories: (parent_id: number) => api.get<FeatureCategory[]>(`/feature-categories/`).then((data: any) => {
     // Extract categories from response structure: { success, count, categories: [...] }
     let categories: any[] = [];
     if (Array.isArray(data)) {
@@ -639,7 +639,7 @@ export const featureApi = {
     // Filter child categories for the given parent
     return categories.filter((c: any) => (c.parent && c.parent.id === parent_id) || c.parent_id === parent_id);
   }),
-  categories: () => api.get<FeatureCategory[]>(`/feature-categories-list/`).then((data: any) => {
+  categories: () => api.get<FeatureCategory[]>(`/feature-categories/`).then((data: any) => {
     // Extract categories from response structure: { success, count, categories: [...] }
     if (Array.isArray(data)) return data;
     if (data.categories && Array.isArray(data.categories)) return data.categories;

@@ -72,6 +72,8 @@ export default function GenerateQuotation() {
   const parentCats = useMemo(() => cats.filter((c: any) => c.parent == null || c.parent_id == null), [cats]);
   const [activeParentCategory, setActiveParentCategory] = useState<number | null>(null);
   const subCats = useMemo(() => (pid: number) => cats.filter((c: any) => (c.parent && c.parent.id === pid) || c.parent_id === pid), [cats]);
+  // Tracks which categories have valid features/prices for the selected model
+  const [availableCategoryIds, setAvailableCategoryIds] = useState<Set<number>>(new Set());
   // Desired parent category order
   const normalize = (s: string) => s.trim().toLowerCase();
   const parentNameOrder: Record<string, number> = useMemo(() => ({
@@ -85,8 +87,24 @@ export default function GenerateQuotation() {
   }), []);
   const sortKey = (name: string) => parentNameOrder[normalize(name)] ?? 999;
   const parentCategories = useMemo(() => {
-    return [...parentCats].sort((a, b) => sortKey(a.name) - sortKey(b.name));
-  }, [parentCats]);
+    // If no model is selected, show all categories (or handle as needed)
+    if (!vehicle.modelId) {
+      return [...parentCats].sort((a, b) => sortKey(a.name) - sortKey(b.name));
+    }
+
+    // Recursive helper to check if a category or its children have available features
+    const isRelevant = (catId: number): boolean => {
+      // Direct match
+      if (availableCategoryIds.has(catId)) return true;
+      // Check children
+      const children = subCats(catId);
+      return children.some(child => isRelevant(child.id));
+    };
+
+    return parentCats
+      .filter(cat => isRelevant(cat.id))
+      .sort((a, b) => sortKey(a.name) - sortKey(b.name));
+  }, [parentCats, availableCategoryIds, vehicle.modelId, subCats]);
   const [typesForModel, setTypesForModel] = useState<FeatureType[]>([]);
   // Map feature_type.id => { price, fpId }
   const [featurePriceMap, setFeaturePriceMap] = useState<Record<number, { price: number; fpId: number }>>({});
@@ -96,6 +114,7 @@ export default function GenerateQuotation() {
   const [imagesByFt, setImagesByFt] = useState<Record<number, FeatureImage[] | null>>({});
   const [loadingImagesByFt, setLoadingImagesByFt] = useState<Record<number, boolean>>({});
   const [loadedCategories, setLoadedCategories] = useState<Set<number>>(new Set());
+
   const [selectedFeaturesOpen, setSelectedFeaturesOpen] = useState(false);
   const [imageZoom, setImageZoom] = useState(1);
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
@@ -140,7 +159,7 @@ export default function GenerateQuotation() {
     Promise.all([
       api.get<any>("/vehicle-types/?limit=20&offset=0"),
       api.get<any>("/vehicle-makers/?limit=20&offset=0"),
-      api.get<any>("/feature-categories-list/") // Fetch all categories from new endpoint
+      api.get<any>("/feature-categories/") // Fetch all categories from new endpoint
     ]).then(([vtRes, mkRes, fcRes]) => {
       // Extract results from paginated response or use array directly
       const vt = Array.isArray(vtRes) ? vtRes : (vtRes.results || []);
@@ -273,6 +292,29 @@ export default function GenerateQuotation() {
 
       setFeaturePriceMap(prev => ({ ...prev, ...featureMap }));
       setCategoryPriceMap(prev => ({ ...prev, ...categoryMap }));
+
+      // Populate availableCategoryIds with all categories that have prices
+      const availableIds = new Set<number>();
+      for (const fp of filteredPrices) {
+         // Check feature_type
+         if (fp.feature_type && typeof fp.feature_type === 'object' && fp.feature_type.category) {
+             availableIds.add(fp.feature_type.category.id);
+             if (fp.feature_type.category.parent) {
+                 availableIds.add(fp.feature_type.category.parent.id);
+             }
+         }
+         
+         // Check feature_category
+         if (fp.feature_category && typeof fp.feature_category === 'object') {
+            availableIds.add(fp.feature_category.id);
+            if (fp.feature_category.parent) {
+                availableIds.add(fp.feature_category.parent.id);
+            }
+         } else if (fp.feature_category_id) {
+             availableIds.add(fp.feature_category_id);
+         }
+      }
+      setAvailableCategoryIds(availableIds);
     } catch (error) {
       console.warn('Error fetching prices for vehicle model:', error);
     }
@@ -296,6 +338,7 @@ export default function GenerateQuotation() {
     setCategoryPriceMap({});
     setImagesByFt({});
     setLoadingImagesByFt({});
+    setAvailableCategoryIds(new Set()); // Clear availability cache
 
     // Fetch all prices for this vehicle model
     fetchAllPricesForModel(vehicle.modelId);
@@ -312,7 +355,7 @@ export default function GenerateQuotation() {
 
     try {
       // Fetch all feature types first
-      const typesRes = await api.get<any>('/feature-types-list/');
+      const typesRes = await api.get<any>('/feature-types/');
 
       // Extract feature types from response structure: { success, count, feature_types: [...] }
       let allFeatureTypes: any[] = [];
@@ -326,13 +369,11 @@ export default function GenerateQuotation() {
 
       // Filter feature types by vehicle model and relevant categories
       const fts = allFeatureTypes.filter((ft: any) => {
-        // Check if vehicle model matches
-        const matchesVehicleModel = ft.vehicle_model_ids && ft.vehicle_model_ids.includes(vehicle.modelId);
         // Check if category matches one of the relevant categories
         const matchesCategory = relevantCategoryIds.some(cid => 
           (ft.category && ft.category.id === cid) || ft.category_id === cid
         );
-        return matchesVehicleModel && matchesCategory;
+        return matchesCategory;
       });
 
       // Fetch all feature prices from the base endpoint
@@ -854,7 +895,7 @@ export default function GenerateQuotation() {
                             <div key={`parent-${parentCat.id}`} className="border rounded-lg p-4 animate-fade-in hover:shadow-sm transition-all duration-200">
                               <h3 className="font-medium mb-3 text-foreground">{parentCat.name}</h3>
                               <div className="space-y-2">
-                                {parentFeatures.map((feature: any) => (
+                                {parentFeatures.filter((f: any) => featurePriceMap[f.id] !== undefined).map((feature: any) => (
                                   <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
                                     <input
                                       type="radio"
@@ -906,7 +947,7 @@ export default function GenerateQuotation() {
                                 <h3 className="font-medium mb-3 text-foreground">{subCat.name}</h3>
                                 <div className="space-y-2">
                                   {/* Show feature types if they exist */}
-                                  {features.map((feature: any) => (
+                                  {features.filter((f: any) => featurePriceMap[f.id] !== undefined).map((feature: any) => (
                                     <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
                                       <input
                                         type="radio"
