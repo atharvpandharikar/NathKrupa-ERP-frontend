@@ -69,9 +69,9 @@ export default function GenerateQuotation() {
   }>({});
   // Backend categories/types
   const [cats, setCats] = useState<FeatureCategory[]>([]);
-  const parentCats = useMemo(() => cats.filter(c => c.parent == null), [cats]);
+  const parentCats = useMemo(() => cats.filter((c: any) => c.parent == null || c.parent_id == null), [cats]);
   const [activeParentCategory, setActiveParentCategory] = useState<number | null>(null);
-  const subCats = useMemo(() => (pid: number) => cats.filter(c => c.parent === pid), [cats]);
+  const subCats = useMemo(() => (pid: number) => cats.filter((c: any) => (c.parent && c.parent.id === pid) || c.parent_id === pid), [cats]);
   // Desired parent category order
   const normalize = (s: string) => s.trim().toLowerCase();
   const parentNameOrder: Record<string, number> = useMemo(() => ({
@@ -136,16 +136,25 @@ export default function GenerateQuotation() {
   const [errors, setErrors] = useState<Partial<CustomerInfo>>({});
   useEffect(() => {
     document.title = `Generate Quotation | ${organizationName}`;
-    // load vehicle types, makers, and categories - use limited results for dropdowns
+    // load vehicle types, makers, and categories - fetch all categories to show all parent categories
     Promise.all([
       api.get<any>("/vehicle-types/?limit=20&offset=0"),
       api.get<any>("/vehicle-makers/?limit=20&offset=0"),
-      api.get<any>("/feature-categories/?limit=20&offset=0")
+      api.get<any>("/feature-categories-list/") // Fetch all categories from new endpoint
     ]).then(([vtRes, mkRes, fcRes]) => {
       // Extract results from paginated response or use array directly
       const vt = Array.isArray(vtRes) ? vtRes : (vtRes.results || []);
       const mk = Array.isArray(mkRes) ? mkRes : (mkRes.results || []);
-      const fc = Array.isArray(fcRes) ? fcRes : (fcRes.results || []);
+      // Extract categories from response structure: { success, count, categories: [...] }
+      let fc: any[] = [];
+      if (Array.isArray(fcRes)) {
+        fc = fcRes;
+      } else if (fcRes.categories && Array.isArray(fcRes.categories)) {
+        fc = fcRes.categories;
+      } else if (fcRes.results && Array.isArray(fcRes.results)) {
+        fc = fcRes.results;
+      }
+      
       setVTypes(vt);
       setMakers(mk);
       setCats(fc);
@@ -188,9 +197,97 @@ export default function GenerateQuotation() {
     }
   }, [vehicle.makerId, modelsByType]);
 
+  // Fetch all prices for the selected vehicle model
+  const fetchAllPricesForModel = async (modelId: number) => {
+    try {
+      const priceRes = await api.get<any>('/feature-prices/?limit=1000&offset=0');
+      // Handle paginated response or direct array
+      let allPrices: any[] = [];
+      if (Array.isArray(priceRes)) {
+        allPrices = priceRes;
+      } else if (priceRes.results && Array.isArray(priceRes.results)) {
+        allPrices = priceRes.results;
+        // If there are more pages, fetch them
+        if (priceRes.next) {
+          let nextUrl: string | null = priceRes.next;
+          while (nextUrl) {
+            try {
+              const urlPath = nextUrl.startsWith('http') 
+                ? nextUrl.replace(API_ROOT, '') 
+                : nextUrl.startsWith('/api/') 
+                  ? nextUrl 
+                  : `/api/${nextUrl}`;
+              const nextRes = await api.get<any>(urlPath);
+              const nextPrices = Array.isArray(nextRes) ? nextRes : (nextRes.results || []);
+              allPrices = [...allPrices, ...nextPrices];
+              nextUrl = (nextRes.next || null) as string | null;
+            } catch (error) {
+              console.warn('Error fetching additional prices:', error);
+              break;
+            }
+          }
+        }
+      }
+
+      // Filter prices by vehicle model
+      const filteredPrices = allPrices.filter((fp: any) => {
+        const matchesVehicleModel = (fp.vehicle_model && fp.vehicle_model.id === modelId) || 
+                                   (fp.vehicle_model_id === modelId);
+        return matchesVehicleModel;
+      });
+
+      // Map prices to feature types and categories
+      const featureMap: Record<number, { price: number; fpId: number }> = {};
+      const categoryMap: Record<number, { price: number; fpId: number }> = {};
+      
+      for (const fp of filteredPrices) {
+        const priceNum = typeof fp.price === 'string' ? parseFloat(fp.price) : fp.price;
+        if (Number.isNaN(priceNum) || priceNum <= 0) continue;
+
+        // Map price to feature type if it exists
+        if (fp.feature_type) {
+          const featureTypeId = typeof fp.feature_type === 'object' && fp.feature_type.id 
+            ? fp.feature_type.id 
+            : (typeof fp.feature_type === 'number' ? fp.feature_type : null);
+          if (featureTypeId) {
+            featureMap[featureTypeId] = { price: priceNum, fpId: fp.id };
+          }
+        } else if (fp.feature_type_id) {
+          featureMap[fp.feature_type_id] = { price: priceNum, fpId: fp.id };
+        }
+        
+        // Map price to category if no feature type (category-level price)
+        if (!fp.feature_type && !fp.feature_type_id) {
+          if (fp.feature_category) {
+            const categoryId = typeof fp.feature_category === 'object' && fp.feature_category.id 
+              ? fp.feature_category.id 
+              : (typeof fp.feature_category === 'number' ? fp.feature_category : null);
+            if (categoryId) {
+              categoryMap[categoryId] = { price: priceNum, fpId: fp.id };
+            }
+          } else if (fp.feature_category_id) {
+            categoryMap[fp.feature_category_id] = { price: priceNum, fpId: fp.id };
+          }
+        }
+      }
+
+      setFeaturePriceMap(prev => ({ ...prev, ...featureMap }));
+      setCategoryPriceMap(prev => ({ ...prev, ...categoryMap }));
+    } catch (error) {
+      console.warn('Error fetching prices for vehicle model:', error);
+    }
+  };
+
   // When model changes, load types and prices for that model
   useEffect(() => {
-    if (!vehicle.modelId) { setTypesForModel([]); setFeaturePriceMap({}); setImagesByFt({}); setLoadingImagesByFt({}); return; }
+    if (!vehicle.modelId) { 
+      setTypesForModel([]); 
+      setFeaturePriceMap({}); 
+      setCategoryPriceMap({});
+      setImagesByFt({}); 
+      setLoadingImagesByFt({}); 
+      return; 
+    }
 
     // Clear previously loaded data when model changes
     setLoadedCategories(new Set());
@@ -200,6 +297,9 @@ export default function GenerateQuotation() {
     setImagesByFt({});
     setLoadingImagesByFt({});
 
+    // Fetch all prices for this vehicle model
+    fetchAllPricesForModel(vehicle.modelId);
+
     if (activeParentCategory) {
       loadFeaturesForCategory(activeParentCategory);
     }
@@ -208,38 +308,118 @@ export default function GenerateQuotation() {
   const loadFeaturesForCategory = async (categoryId: number) => {
     if (!vehicle.modelId || loadedCategories.has(categoryId)) return;
 
-    const relevantCategoryIds = [categoryId, ...subCats(categoryId).map(sc => sc.id)];
+    const relevantCategoryIds = [categoryId, ...subCats(categoryId).map((sc: any) => sc.id)];
 
     try {
-      // Fetch feature types and prices for each category separately and aggregate - use pagination
-      const typePromises = relevantCategoryIds.map(cid =>
-        api.get<any>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle.modelId}&category_id=${cid}&limit=20&offset=0`)
-      );
-      const pricePromises = relevantCategoryIds.map(cid =>
-        api.get<any>(`/feature-prices/?vehicle_model=${vehicle.modelId}&feature_category=${cid}&limit=20&offset=0`)
-      );
+      // Fetch all feature types first
+      const typesRes = await api.get<any>('/feature-types-list/');
 
-      const [ftsArrays, fpsArrays] = await Promise.all([
-        Promise.all(typePromises),
-        Promise.all(pricePromises)
-      ]);
+      // Extract feature types from response structure: { success, count, feature_types: [...] }
+      let allFeatureTypes: any[] = [];
+      if (Array.isArray(typesRes)) {
+        allFeatureTypes = typesRes;
+      } else if (typesRes.feature_types && Array.isArray(typesRes.feature_types)) {
+        allFeatureTypes = typesRes.feature_types;
+      } else if (typesRes.results && Array.isArray(typesRes.results)) {
+        allFeatureTypes = typesRes.results;
+      }
 
-      // Extract results from paginated responses or use arrays directly
-      const fts = ftsArrays.flatMap(ftRes => Array.isArray(ftRes) ? ftRes : (ftRes.results || []));
-      const fps = fpsArrays.flatMap(fpRes => Array.isArray(fpRes) ? fpRes : (fpRes.results || []));
+      // Filter feature types by vehicle model and relevant categories
+      const fts = allFeatureTypes.filter((ft: any) => {
+        // Check if vehicle model matches
+        const matchesVehicleModel = ft.vehicle_model_ids && ft.vehicle_model_ids.includes(vehicle.modelId);
+        // Check if category matches one of the relevant categories
+        const matchesCategory = relevantCategoryIds.some(cid => 
+          (ft.category && ft.category.id === cid) || ft.category_id === cid
+        );
+        return matchesVehicleModel && matchesCategory;
+      });
 
-      setTypesForModel(prev => [...prev, ...fts]);
+      // Fetch all feature prices from the base endpoint
+      let allPrices: any[] = [];
+      try {
+        const priceRes = await api.get<any>('/feature-prices/?limit=1000&offset=0');
+        // Handle paginated response or direct array
+        if (Array.isArray(priceRes)) {
+          allPrices = priceRes;
+        } else if (priceRes.results && Array.isArray(priceRes.results)) {
+          allPrices = priceRes.results;
+          // If there are more pages, fetch them
+          if (priceRes.next) {
+            let nextUrl: string | null = priceRes.next;
+            while (nextUrl) {
+              try {
+                const urlPath = nextUrl.startsWith('http') 
+                  ? nextUrl.replace(API_ROOT, '') 
+                  : nextUrl.startsWith('/api/') 
+                    ? nextUrl 
+                    : `/api/${nextUrl}`;
+                const nextRes = await api.get<any>(urlPath);
+                const nextPrices = Array.isArray(nextRes) ? nextRes : (nextRes.results || []);
+                allPrices = [...allPrices, ...nextPrices];
+                nextUrl = (nextRes.next || null) as string | null;
+              } catch (error) {
+                console.warn('Error fetching additional prices:', error);
+                break;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching feature prices:', error);
+      }
+
+      // Filter prices by vehicle model and relevant categories
+      const fps = allPrices.filter((fp: any) => {
+        // Check if vehicle model matches
+        const matchesVehicleModel = (fp.vehicle_model && fp.vehicle_model.id === vehicle.modelId) || 
+                                   (fp.vehicle_model_id === vehicle.modelId);
+        // Check if category matches one of the relevant categories
+        const matchesCategory = relevantCategoryIds.some(cid => 
+          (fp.feature_category && fp.feature_category.id === cid) || 
+          (fp.feature_category_id === cid)
+        );
+        return matchesVehicleModel && matchesCategory;
+      });
+
+      // Avoid duplicates - only add feature types that aren't already in the list
+      setTypesForModel(prev => {
+        const existingIds = new Set(prev.map((ft: any) => ft.id));
+        const newFts = fts.filter((ft: any) => !existingIds.has(ft.id));
+        return [...prev, ...newFts];
+      });
 
       const featureMap: Record<number, { price: number; fpId: number }> = {};
       const categoryMap: Record<number, { price: number; fpId: number }> = {};
       for (const fp of fps) {
         const priceNum = typeof fp.price === 'string' ? parseFloat(fp.price) : fp.price;
-        if (Number.isNaN(priceNum)) continue;
+        if (Number.isNaN(priceNum) || priceNum <= 0) continue;
 
-        if (fp.feature_type && fp.feature_type.id) {
-          featureMap[fp.feature_type.id] = { price: priceNum, fpId: fp.id };
-        } else if (fp.feature_category && fp.feature_category.id) {
-          categoryMap[fp.feature_category.id] = { price: priceNum, fpId: fp.id };
+        // Map price to feature type if it exists (priority: feature_type object > feature_type_id)
+        if (fp.feature_type) {
+          const featureTypeId = typeof fp.feature_type === 'object' && fp.feature_type.id 
+            ? fp.feature_type.id 
+            : (typeof fp.feature_type === 'number' ? fp.feature_type : null);
+          if (featureTypeId) {
+            featureMap[featureTypeId] = { price: priceNum, fpId: fp.id };
+          }
+        } else if (fp.feature_type_id) {
+          featureMap[fp.feature_type_id] = { price: priceNum, fpId: fp.id };
+        }
+        
+        // Map price to category if no feature type (category-level price)
+        // Only map to category if there's no feature_type associated
+        if (!fp.feature_type && !fp.feature_type_id) {
+          if (fp.feature_category) {
+            const categoryId = typeof fp.feature_category === 'object' && fp.feature_category.id 
+              ? fp.feature_category.id 
+              : (typeof fp.feature_category === 'number' ? fp.feature_category : null);
+            if (categoryId) {
+              categoryMap[categoryId] = { price: priceNum, fpId: fp.id };
+            }
+          } else if (fp.feature_category_id) {
+            categoryMap[fp.feature_category_id] = { price: priceNum, fpId: fp.id };
+          }
         }
       }
 
@@ -248,8 +428,25 @@ export default function GenerateQuotation() {
 
       setLoadedCategories(prev => new Set(prev).add(categoryId));
 
-    } catch (error) {
-      toast({ title: `Failed to load features for category ${categoryId}`, variant: 'destructive' });
+    } catch (error: any) {
+      // Only show error if it's a critical failure (like feature types fetch failed)
+      console.error(`Error loading features for category ${categoryId}:`, error);
+      // Don't show toast for missing prices or 404s - that's normal for some categories
+      const errorMessage = error?.message || String(error || '');
+      const isNotFound = errorMessage.includes('404') || 
+                        errorMessage.includes('Not Found') || 
+                        errorMessage.includes('not found') ||
+                        errorMessage.includes('No prices');
+      
+      if (!isNotFound) {
+        toast({ 
+          title: `Failed to load features for category ${categoryId}`, 
+          description: errorMessage || 'Please try again',
+          variant: 'destructive' 
+        });
+      }
+      // Still mark as loaded to prevent infinite retries
+      setLoadedCategories(prev => new Set(prev).add(categoryId));
     }
   };
 
@@ -638,57 +835,118 @@ export default function GenerateQuotation() {
                         Loading features...
                       </div>
                     )}
-                    {loadedCategories.has(parentCat.id) && subCats(parentCat.id).map(subCat => {
-                      const features = typesForModel.filter(ft => ft.category.id === subCat.id);
-                      const categoryPrice = categoryPriceMap[subCat.id];
-                      const hasFeatures = features.length > 0;
-                      const hasCategoryPrice = categoryPrice !== undefined;
-
-                      if (!hasFeatures && !hasCategoryPrice) return null;
-
-                      return (
-                        <div key={subCat.id} className="border rounded-lg p-4 animate-fade-in hover:shadow-sm transition-all duration-200">
-                          <h3 className="font-medium mb-3 text-foreground">{subCat.name}</h3>
-                          <div className="space-y-2">
-                            {/* Show feature types if they exist */}
-                            {features.map(feature => (
-                              <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
-                                <input
-                                  type="radio"
-                                  name={`category-${subCat.id}`}
-                                  checked={selected[subCat.id] === feature.id}
-                                  onChange={() => {
-                                    setSelected({ ...selected, [subCat.id]: feature.id });
-                                    setFocusedFeatureId(feature.id);
-                                  }}
-                                  className="text-primary transition-colors duration-150"
-                                />
-                                <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{feature.name}</span>
-                                <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{(featurePriceMap[feature.id]?.price ?? 0).toLocaleString()}</Badge>
-                              </label>
-                            ))}
-
-                            {/* Show category option if it has a price but no types */}
-                            {hasCategoryPrice && !hasFeatures && (
-                              <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
-                                <input
-                                  type="radio"
-                                  name={`category-${subCat.id}`}
-                                  checked={selected[subCat.id] === subCat.id}
-                                  onChange={() => {
-                                    setSelected({ ...selected, [subCat.id]: subCat.id });
-                                    setFocusedFeatureId(subCat.id);
-                                  }}
-                                  className="text-primary transition-colors duration-150"
-                                />
-                                <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{subCat.name}</span>
-                                <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{categoryPrice.price.toLocaleString()}</Badge>
-                              </label>
-                            )}
-                          </div>
-                        </div>
+                    {loadedCategories.has(parentCat.id) && (() => {
+                      // First, show features directly assigned to the parent category (if any)
+                      const parentFeatures = typesForModel.filter((ft: any) => 
+                        (ft.category && ft.category.id === parentCat.id) || ft.category_id === parentCat.id
                       );
-                    })}
+                      const parentCategoryPrice = categoryPriceMap[parentCat.id];
+                      const hasParentFeatures = parentFeatures.length > 0;
+                      const hasParentCategoryPrice = parentCategoryPrice !== undefined;
+
+                      // Then show subcategories
+                      const subCategories = subCats(parentCat.id);
+                      
+                      return (
+                        <>
+                          {/* Show parent category features if they exist */}
+                          {(hasParentFeatures || hasParentCategoryPrice) && (
+                            <div key={`parent-${parentCat.id}`} className="border rounded-lg p-4 animate-fade-in hover:shadow-sm transition-all duration-200">
+                              <h3 className="font-medium mb-3 text-foreground">{parentCat.name}</h3>
+                              <div className="space-y-2">
+                                {parentFeatures.map((feature: any) => (
+                                  <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
+                                    <input
+                                      type="radio"
+                                      name={`category-${parentCat.id}`}
+                                      checked={selected[parentCat.id] === feature.id}
+                                      onChange={() => {
+                                        setSelected({ ...selected, [parentCat.id]: feature.id });
+                                        setFocusedFeatureId(feature.id);
+                                      }}
+                                      className="text-primary transition-colors duration-150"
+                                    />
+                                    <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{feature.name}</span>
+                                    <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{(featurePriceMap[feature.id]?.price ?? 0).toLocaleString()}</Badge>
+                                  </label>
+                                ))}
+                                {hasParentCategoryPrice && !hasParentFeatures && (
+                                  <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
+                                    <input
+                                      type="radio"
+                                      name={`category-${parentCat.id}`}
+                                      checked={selected[parentCat.id] === parentCat.id}
+                                      onChange={() => {
+                                        setSelected({ ...selected, [parentCat.id]: parentCat.id });
+                                        setFocusedFeatureId(parentCat.id);
+                                      }}
+                                      className="text-primary transition-colors duration-150"
+                                    />
+                                    <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{parentCat.name}</span>
+                                    <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{parentCategoryPrice.price.toLocaleString()}</Badge>
+                                  </label>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {/* Show subcategories */}
+                          {subCategories.map(subCat => {
+                            // Filter feature types by category - handle both category object and category_id
+                            const features = typesForModel.filter((ft: any) => 
+                              (ft.category && ft.category.id === subCat.id) || ft.category_id === subCat.id
+                            );
+                            const categoryPrice = categoryPriceMap[subCat.id];
+                            const hasFeatures = features.length > 0;
+                            const hasCategoryPrice = categoryPrice !== undefined;
+
+                            if (!hasFeatures && !hasCategoryPrice) return null;
+
+                            return (
+                              <div key={subCat.id} className="border rounded-lg p-4 animate-fade-in hover:shadow-sm transition-all duration-200">
+                                <h3 className="font-medium mb-3 text-foreground">{subCat.name}</h3>
+                                <div className="space-y-2">
+                                  {/* Show feature types if they exist */}
+                                  {features.map((feature: any) => (
+                                    <label key={feature.id} className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
+                                      <input
+                                        type="radio"
+                                        name={`category-${subCat.id}`}
+                                        checked={selected[subCat.id] === feature.id}
+                                        onChange={() => {
+                                          setSelected({ ...selected, [subCat.id]: feature.id });
+                                          setFocusedFeatureId(feature.id);
+                                        }}
+                                        className="text-primary transition-colors duration-150"
+                                      />
+                                      <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{feature.name}</span>
+                                      <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{(featurePriceMap[feature.id]?.price ?? 0).toLocaleString()}</Badge>
+                                    </label>
+                                  ))}
+
+                                  {/* Show category option if it has a price but no types */}
+                                  {hasCategoryPrice && !hasFeatures && (
+                                    <label className="flex items-center gap-3 cursor-pointer p-2 rounded hover:bg-muted/50 transition-all duration-150 hover:scale-[1.02] group">
+                                      <input
+                                        type="radio"
+                                        name={`category-${subCat.id}`}
+                                        checked={selected[subCat.id] === subCat.id}
+                                        onChange={() => {
+                                          setSelected({ ...selected, [subCat.id]: subCat.id });
+                                          setFocusedFeatureId(subCat.id);
+                                        }}
+                                        className="text-primary transition-colors duration-150"
+                                      />
+                                      <span className="flex-1 text-sm group-hover:text-foreground transition-colors duration-150">{subCat.name}</span>
+                                      <Badge variant="outline" className="text-xs group-hover:border-primary/50 transition-colors duration-150">₹{categoryPrice.price.toLocaleString()}</Badge>
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </div>
@@ -879,7 +1137,7 @@ export default function GenerateQuotation() {
     const { activeParentCategory, cats, selected, featurePriceMap, categoryPriceMap, imagesByFt, loadingImagesByFt, imageZoom, imagePosition, hasFeatureImages, setHasFeatureImages, focusedFeatureId, setFocusedFeatureId, onNeedImages } = props;
     const selectedFeatureIds = useMemo(() => {
       if (!activeParentCategory) return [];
-      const subIds = cats.filter(c => c.parent === activeParentCategory).map(c => c.id);
+      const subIds = cats.filter((c: any) => (c.parent && c.parent.id === activeParentCategory) || c.parent_id === activeParentCategory).map((c: any) => c.id);
       const selectedIds: number[] = [];
 
       for (const cid of subIds) {

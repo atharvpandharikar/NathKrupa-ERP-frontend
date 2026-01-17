@@ -161,7 +161,23 @@ export default function QuotationDetails() {
         featureApi.byVehicleModel(vmId, selectedChildCategoryId).then(setFeatureTypes).catch(() => { });
       } else {
         // Fallback: generic feature types by category if model id missing
-        api.get<FeatureType[]>(`/feature-types/?category=${selectedChildCategoryId}`).then(setFeatureTypes).catch(() => { });
+        api.get<any>('/feature-types-list/').then((data: any) => {
+          // Extract feature types from response structure: { success, count, feature_types: [...] }
+          let allFeatureTypes: any[] = [];
+          if (Array.isArray(data)) {
+            allFeatureTypes = data;
+          } else if (data.feature_types && Array.isArray(data.feature_types)) {
+            allFeatureTypes = data.feature_types;
+          } else if (data.results && Array.isArray(data.results)) {
+            allFeatureTypes = data.results;
+          }
+          // Filter by selected category
+          const filtered = allFeatureTypes.filter((ft: any) => 
+            (ft.category && ft.category.id === selectedChildCategoryId) || 
+            ft.category_id === selectedChildCategoryId
+          );
+          setFeatureTypes(filtered);
+        }).catch(() => { });
       }
     } else {
       setFeatureTypes([]); setSelectedFeatureType(null);

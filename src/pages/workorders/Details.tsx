@@ -497,20 +497,39 @@ export default function WorkOrderDetails() {
     queryFn: () => addedFeaturesApi.list({ work_order: workOrder?.id }),
     enabled: !!numericId && !!workOrder?.id,
   });
-  // payments query removed - all payments now handled through finance app
+  // Fetch finance transactions linked to this work order by bill number or work order number
+  const billNumber = workOrder?.bill_number || workOrder?.work_order_number;
+  const { data: allFinanceTransactions = [], isLoading: isLoadingTransactions } = useQuery({
+    queryKey: ["finance-transactions", "work-order", billNumber],
+    queryFn: async () => {
+      if (!billNumber) return [];
+      try {
+        // Fetch transactions with bill_no filter (case-insensitive matching)
+        const response = await financeApi.get<any>(`/transactions/?bill_no=${encodeURIComponent(billNumber)}&page_size=100`);
+        // Handle paginated response
+        let transactions: any[] = [];
+        if (Array.isArray(response)) {
+          transactions = response;
+        } else if (response.results) {
+          transactions = response.results;
+        }
+        
+        // Filter transactions that match the bill number (case-insensitive)
+        const normalizedBillNumber = billNumber?.toUpperCase().trim();
+        return transactions.filter((t: any) => {
+          const transactionBillNo = (t.bill_no || '').toUpperCase().trim();
+          return transactionBillNo === normalizedBillNumber;
+        });
+      } catch (error) {
+        console.error('Error fetching finance transactions:', error);
+        return [];
+      }
+    },
+    enabled: !!billNumber && !!workOrder,
+  });
 
-  // Fetch finance transactions linked to this work order by work order number - handle pagination
-  // Finance transactions API call removed as per request
-  // -----------
-  const allFinanceTransactions: any[] = [];
-
-  // Filter to only show payments from the specific customer for this work order
-  const customerName = (workOrder?.quotation?.customer || workOrder?.work_order?.quotation?.customer)?.name;
-  const financeTransactions = allFinanceTransactions.filter(t =>
-    t.bill_no === workOrder?.work_order_number &&
-    t.transaction_type === 'Credit' &&
-    t.from_party === customerName
-  );
+  // Show all transactions (both Credit and Debit) that match the bill number
+  const financeTransactions = allFinanceTransactions || [];
 
   // Debug logging
   // console.log('Work Order Debug:', {
@@ -584,7 +603,24 @@ export default function WorkOrderDetails() {
     setChildCategories([]); setFeatureTypes([]); setFeaturePrices([]);
     featureApi.parentCategories().then(setParentCategories).catch(() => { });
     const vmId = (workOrder as any)?.quotation?.vehicle_model_id || (workOrder as any)?.quotation?.vehicle_model?.id || (workOrder as any)?.work_order?.quotation?.vehicle_model_id || (workOrder as any)?.work_order?.quotation?.vehicle_model?.id;
-    if (vmId) featureApi.pricesByModel(vmId).then(setFeaturePrices).catch(() => { });
+    if (vmId) {
+      featureApi.pricesByModel(vmId)
+        .then((prices: any) => {
+          // Ensure prices is always an array
+          if (Array.isArray(prices)) {
+            setFeaturePrices(prices);
+          } else if (prices && Array.isArray(prices.results)) {
+            setFeaturePrices(prices.results);
+          } else {
+            setFeaturePrices([]);
+          }
+        })
+        .catch(() => { 
+          setFeaturePrices([]);
+        });
+    } else {
+      setFeaturePrices([]);
+    }
   }, [addWorkDialogOpen, workOrder]);
 
   // Load finance accounts and pre-fill form when payment dialog opens
@@ -613,8 +649,26 @@ export default function WorkOrderDetails() {
 
   useEffect(() => {
     if (!addWorkDialogOpen) return;
-    if (selectedParentCategoryId == null) { setChildCategories([]); setSelectedChildCategoryId(null); return; }
-    featureApi.childCategories(selectedParentCategoryId).then(setChildCategories).catch(() => { });
+    if (selectedParentCategoryId == null) { 
+      setChildCategories([]); 
+      setSelectedChildCategoryId(null); 
+      return; 
+    }
+    // Fetch all categories and filter for child categories of the selected parent
+    featureApi.categories()
+      .then((allCategories) => {
+        // Filter for child categories (where parent matches selectedParentCategoryId)
+        const childCats = allCategories.filter((c: any) => 
+          (c.parent && c.parent.id === selectedParentCategoryId) || 
+          c.parent_id === selectedParentCategoryId
+        );
+        console.log('Loaded child categories for parent', selectedParentCategoryId, ':', childCats);
+        setChildCategories(childCats);
+      })
+      .catch((error) => { 
+        console.error('Error loading child categories:', error);
+        setChildCategories([]);
+      });
   }, [selectedParentCategoryId, addWorkDialogOpen]);
 
   useEffect(() => {
@@ -632,13 +686,36 @@ export default function WorkOrderDetails() {
     if (!addWorkDialogOpen || !addWorkExisting) { setAutoUnitPrice(null); return; }
     const vmId = (workOrder as any)?.quotation?.vehicle_model_id || (workOrder as any)?.quotation?.vehicle_model?.id || (workOrder as any)?.work_order?.quotation?.vehicle_model_id || (workOrder as any)?.work_order?.quotation?.vehicle_model?.id;
     if (!vmId) { setAutoUnitPrice(null); return; }
+    
+    // Ensure featurePrices is always an array before using .find()
+    if (!Array.isArray(featurePrices)) {
+      setAutoUnitPrice(null);
+      return;
+    }
+    
     if (selectedFeatureType) {
-      const fp = featurePrices.find(p => p.feature_type && p.feature_type.id === selectedFeatureType);
-      if (fp) { setAutoUnitPrice(Number(fp.price)); if (!addWorkForm.unit_price) setAddWorkForm(p => ({ ...p, unit_price: String(fp.price) })); return; }
+      const fp = featurePrices.find((p: any) => 
+        (p.feature_type && (typeof p.feature_type === 'object' ? p.feature_type.id : p.feature_type) === selectedFeatureType) ||
+        p.feature_type_id === selectedFeatureType
+      );
+      if (fp) { 
+        setAutoUnitPrice(Number(fp.price)); 
+        if (!addWorkForm.unit_price) setAddWorkForm(p => ({ ...p, unit_price: String(fp.price) })); 
+        return; 
+      }
     }
     if (selectedChildCategoryId) {
-      const fp = featurePrices.find(p => !p.feature_type && p.feature_category.id === selectedChildCategoryId);
-      if (fp) { setAutoUnitPrice(Number(fp.price)); if (!addWorkForm.unit_price) setAddWorkForm(p => ({ ...p, unit_price: String(fp.price) })); return; }
+      const fp = featurePrices.find((p: any) => 
+        !p.feature_type && 
+        !p.feature_type_id && 
+        ((p.feature_category && (typeof p.feature_category === 'object' ? p.feature_category.id : p.feature_category) === selectedChildCategoryId) ||
+         p.feature_category_id === selectedChildCategoryId)
+      );
+      if (fp) { 
+        setAutoUnitPrice(Number(fp.price)); 
+        if (!addWorkForm.unit_price) setAddWorkForm(p => ({ ...p, unit_price: String(fp.price) })); 
+        return; 
+      }
     }
     setAutoUnitPrice(null);
   }, [addWorkDialogOpen, addWorkExisting, selectedFeatureType, selectedChildCategoryId, featurePrices, addWorkForm.unit_price, workOrder]);
@@ -706,7 +783,9 @@ export default function WorkOrderDetails() {
     },
     onSuccess: () => {
       // Invalidate all finance transactions queries
+      const billNumber = workOrder?.bill_number || workOrder?.work_order_number;
       queryClient.invalidateQueries({ queryKey: ["finance-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["finance-transactions", "work-order", billNumber] });
       queryClient.invalidateQueries({ queryKey: ["work-order", numericId] });
       setPaymentDialogOpen(false);
       setPaymentForm({
@@ -799,9 +878,10 @@ export default function WorkOrderDetails() {
   const additionalAmount = Number(workOrder.total_added_features_cost || 0);
   const totalAmount = quoteAfterDiscount + additionalAmount;
 
-  // Calculate paid amount from finance transactions only
-  const paidAmount = financeTransactions
-    .reduce((sum, t) => sum + Number(t.amount), 0);
+  // Calculate paid amount from finance transactions only (Credit = money received, Debit = money paid out)
+  const paidAmount = (financeTransactions || [])
+    .filter((t: any) => t.transaction_type === 'Credit')
+    .reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0);
 
   // Always calculate remaining balance directly to ensure accuracy
   const balanceAmount = totalAmount - paidAmount;
@@ -1108,10 +1188,48 @@ export default function WorkOrderDetails() {
                       </div>
                       <div className="grid gap-1">
                         <Label>Category</Label>
-                        <select aria-label="Child Category" className="border rounded px-2 py-1 text-sm" disabled={!selectedParentCategoryId} value={selectedChildCategoryId ?? ''} onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setSelectedChildCategoryId(v); setSelectedFeatureType(null); }}>
-                          <option value="">{selectedParentCategoryId ? '-- Select Category --' : 'Select parent first'}</option>
-                          {childCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        <select 
+                          aria-label="Category" 
+                          className="border rounded px-2 py-1 text-sm" 
+                          disabled={!selectedParentCategoryId} 
+                          value={selectedChildCategoryId ?? ''} 
+                          onChange={e => { 
+                            const v = e.target.value ? Number(e.target.value) : null; 
+                            setSelectedChildCategoryId(v); 
+                            setSelectedFeatureType(null); 
+                          }}
+                        >
+                          <option value="">
+                            {selectedParentCategoryId 
+                              ? '-- Select Category --' 
+                              : 'Select parent first'}
+                          </option>
+                          {selectedParentCategoryId && (() => {
+                            // Get the selected parent category object
+                            const selectedParent = parentCategories.find((p: any) => p.id === selectedParentCategoryId);
+                            const allCategoryOptions = selectedParent 
+                              ? [
+                                  // First option: Parent category itself (in case features are directly assigned to it)
+                                  { id: selectedParent.id, name: `${selectedParent.name} (Parent)` },
+                                  // Then child categories
+                                  ...childCategories
+                                ]
+                              : childCategories;
+                            
+                            return allCategoryOptions.length > 0 ? (
+                              allCategoryOptions.map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))
+                            ) : (
+                              <option value="" disabled>No categories available</option>
+                            );
+                          })()}
                         </select>
+                        {selectedParentCategoryId && childCategories.length === 0 && (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            No subcategories found. You can select the parent category or a feature type if available.
+                          </p>
+                        )}
                       </div>
                       <div className="grid gap-1">
                         <Label>Feature Type (optional)</Label>
@@ -1288,29 +1406,76 @@ export default function WorkOrderDetails() {
           </div>
           <Card>
             <CardContent className="pt-4">
-              {financeTransactions.length === 0 && <div className="text-sm text-muted-foreground py-2">No payments yet.</div>}
-              <ul className="text-sm divide-y">
-                {/* Finance transactions - all payments now handled through finance app */}
-                {financeTransactions.map(t => (
-                  <li key={`transaction-${t.id}`} className="py-3 flex justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="font-medium">₹{Number(t.amount).toLocaleString('en-IN')}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {t.purpose} • {new Date(t.time).toLocaleDateString()}
+              {isLoadingTransactions && (
+                <div className="text-sm text-muted-foreground py-2">Loading payments...</div>
+              )}
+              {!isLoadingTransactions && financeTransactions.length === 0 && (
+                <div className="text-sm text-muted-foreground py-2">No payments yet.</div>
+              )}
+              {!isLoadingTransactions && financeTransactions.length > 0 && (
+                <ul className="text-sm divide-y">
+                  {/* Finance transactions - all payments now handled through finance app */}
+                  {financeTransactions.map((t: any) => (
+                    <li key={`transaction-${t.id}`} className="py-3 flex justify-between gap-4">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">₹{Number(t.amount || 0).toLocaleString('en-IN')}</span>
+                          <Badge 
+                            variant={t.transaction_type === 'Credit' ? 'default' : 'secondary'}
+                            className="text-xs"
+                          >
+                            {t.transaction_type}
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {t.purpose || 'No purpose specified'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(t.time).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                        {t.from_party && (
+                          <div className="text-xs text-muted-foreground">
+                            From: {t.from_party}
+                          </div>
+                        )}
+                        {t.to_party && (
+                          <div className="text-xs text-muted-foreground">
+                            To: {t.to_party}
+                          </div>
+                        )}
+                        {t.account_nickname && (
+                          <div className="text-xs text-muted-foreground">
+                            Account: {t.account_nickname}
+                          </div>
+                        )}
+                        {t.utr_number && (
+                          <div className="text-xs text-muted-foreground">
+                            UTR: {t.utr_number}
+                          </div>
+                        )}
+                        {t.image && (
+                          <div className="mt-2">
+                            <a 
+                              href={t.image.startsWith('http') ? t.image : `${API_ROOT}${t.image}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              View Receipt
+                            </a>
+                          </div>
+                        )}
                       </div>
-                      {t.from_party && (
-                        <div className="text-xs text-muted-foreground">From: {t.from_party}</div>
-                      )}
-                      {t.utr_number && (
-                        <div className="text-xs text-muted-foreground">UTR: {t.utr_number}</div>
-                      )}
-                    </div>
-                    <Badge variant="outline" className="self-start text-xs">
-                      Payment
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

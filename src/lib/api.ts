@@ -592,11 +592,74 @@ export type QuotationData = { // Export QuotationData
 
 export const featureApi = {
   // Correct hyphenated backend routes
-  byVehicleModel: (vehicle_model_id: number, category_id?: number) => api.get<FeatureType[]>(`/feature-types/by_vehicle_model/?vehicle_model_id=${vehicle_model_id}${category_id ? `&category_id=${category_id}` : ''}`),
-  parentCategories: () => api.get<FeatureCategory[]>(`/feature-categories/parents/`),
-  childCategories: (parent_id: number) => api.get<FeatureCategory[]>(`/feature-categories/children/?parent_id=${parent_id}`),
-  categories: () => api.get<FeatureCategory[]>(`/feature-categories/`), // fallback / full list
-  pricesByModel: (vehicle_model_id: number) => api.get<FeaturePrice[]>(`/feature-prices/?vehicle_model=${vehicle_model_id}`),
+  byVehicleModel: (vehicle_model_id: number, category_id?: number) => api.get<FeatureType[]>(`/feature-types-list/`).then((data: any) => {
+    // Extract feature types from response structure: { success, count, feature_types: [...] }
+    let featureTypes: any[] = [];
+    if (Array.isArray(data)) {
+      featureTypes = data;
+    } else if (data.feature_types && Array.isArray(data.feature_types)) {
+      featureTypes = data.feature_types;
+    } else if (data.results && Array.isArray(data.results)) {
+      featureTypes = data.results;
+    }
+    // Filter by vehicle model and category
+    return featureTypes.filter((ft: any) => {
+      // Check if vehicle model matches
+      const matchesVehicleModel = ft.vehicle_model_ids && ft.vehicle_model_ids.includes(vehicle_model_id);
+      // Check if category matches
+      const matchesCategory = !category_id || 
+        (ft.category && ft.category.id === category_id) || 
+        ft.category_id === category_id;
+      return matchesVehicleModel && matchesCategory;
+    });
+  }),
+  parentCategories: () => api.get<FeatureCategory[]>(`/feature-categories-list/`).then((data: any) => {
+    // Extract categories from response structure: { success, count, categories: [...] }
+    let categories: any[] = [];
+    if (Array.isArray(data)) {
+      categories = data;
+    } else if (data.categories && Array.isArray(data.categories)) {
+      categories = data.categories;
+    } else if (data.results && Array.isArray(data.results)) {
+      categories = data.results;
+    }
+    // Filter parent categories (where parent is null)
+    return categories.filter((c: any) => c.parent == null || c.parent_id == null);
+  }),
+  childCategories: (parent_id: number) => api.get<FeatureCategory[]>(`/feature-categories-list/`).then((data: any) => {
+    // Extract categories from response structure: { success, count, categories: [...] }
+    let categories: any[] = [];
+    if (Array.isArray(data)) {
+      categories = data;
+    } else if (data.categories && Array.isArray(data.categories)) {
+      categories = data.categories;
+    } else if (data.results && Array.isArray(data.results)) {
+      categories = data.results;
+    }
+    // Filter child categories for the given parent
+    return categories.filter((c: any) => (c.parent && c.parent.id === parent_id) || c.parent_id === parent_id);
+  }),
+  categories: () => api.get<FeatureCategory[]>(`/feature-categories-list/`).then((data: any) => {
+    // Extract categories from response structure: { success, count, categories: [...] }
+    if (Array.isArray(data)) return data;
+    if (data.categories && Array.isArray(data.categories)) return data.categories;
+    if (data.results && Array.isArray(data.results)) return data.results;
+    return [];
+  }),
+  pricesByModel: (vehicle_model_id: number) => api.get<FeaturePrice[]>(`/feature-prices/?limit=1000&offset=0`).then((data: any) => {
+    // Extract prices from response structure
+    let allPrices: any[] = [];
+    if (Array.isArray(data)) {
+      allPrices = data;
+    } else if (data.results && Array.isArray(data.results)) {
+      allPrices = data.results;
+    }
+    // Filter by vehicle model
+    return allPrices.filter((fp: any) => 
+      (fp.vehicle_model && fp.vehicle_model.id === vehicle_model_id) || 
+      fp.vehicle_model_id === vehicle_model_id
+    );
+  }),
 };
 
 export const workOrdersApi = {

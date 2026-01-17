@@ -110,10 +110,19 @@ export function useOptimizedFeatureCategories() {
             }
 
             try {
-                // Fetch only necessary fields
-                const response = await api.get<any[]>('/feature-categories/?fields=id,name,parent,is_active');
-                setCachedData(cacheKey, response);
-                setCategories(response);
+                // Fetch from new endpoint
+                const response = await api.get<any[]>('/feature-categories-list/');
+                // Extract categories from response structure: { success, count, categories: [...] }
+                let categories: any[] = [];
+                if (Array.isArray(response)) {
+                    categories = response;
+                } else if (response.categories && Array.isArray(response.categories)) {
+                    categories = response.categories;
+                } else if (response.results && Array.isArray(response.results)) {
+                    categories = response.results;
+                }
+                setCachedData(cacheKey, categories);
+                setCategories(categories);
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -127,9 +136,18 @@ export function useOptimizedFeatureCategories() {
     const refresh = useCallback(async () => {
         dataCache.delete('feature-categories');
         setLoading(true);
-        const response = await api.get<any[]>('/feature-categories/?fields=id,name,parent,is_active');
-        setCachedData('feature-categories', response);
-        setCategories(response);
+        const response = await api.get<any[]>('/feature-categories-list/');
+        // Extract categories from response structure: { success, count, categories: [...] }
+        let categories: any[] = [];
+        if (Array.isArray(response)) {
+            categories = response;
+        } else if (response.categories && Array.isArray(response.categories)) {
+            categories = response.categories;
+        } else if (response.results && Array.isArray(response.results)) {
+            categories = response.results;
+        }
+        setCachedData('feature-categories', categories);
+        setCategories(categories);
         setLoading(false);
     }, []);
 
@@ -472,13 +490,27 @@ export function useOptimizedAllFeatureData(page = 1, pageSize = 20) {
                 } else {
                     const [modelsRes, categoriesRes, typesRes] = await Promise.all([
                         api.get<any>('/vehicle-models/?limit=20&offset=0'),
-                        api.get<any>('/feature-categories/?limit=20&offset=0'),
-                        api.get<any>('/feature-types/?limit=20&offset=0'),
+                        api.get<any>('/feature-categories-list/'),
+                        api.get<any>('/feature-types-list/'),
                     ]);
 
                     models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
-                    categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
-                    types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
+                    // Extract categories from response structure: { success, count, categories: [...] }
+                    if (Array.isArray(categoriesRes)) {
+                        categories = categoriesRes;
+                    } else if (categoriesRes.categories && Array.isArray(categoriesRes.categories)) {
+                        categories = categoriesRes.categories;
+                    } else if (categoriesRes.results && Array.isArray(categoriesRes.results)) {
+                        categories = categoriesRes.results;
+                    }
+                    // Extract feature types from response structure: { success, count, feature_types: [...] }
+                    if (Array.isArray(typesRes)) {
+                        types = typesRes;
+                    } else if (typesRes.feature_types && Array.isArray(typesRes.feature_types)) {
+                        types = typesRes.feature_types;
+                    } else if (typesRes.results && Array.isArray(typesRes.results)) {
+                        types = typesRes.results;
+                    }
 
                     setCachedData(cacheKeys.models, models);
                     setCachedData(cacheKeys.categories, categories);
@@ -542,11 +574,22 @@ export function useOptimizedFeatureCategoriesPageData(page = 1, pageSize = 20) {
                     setCachedData(cacheKeys.vehicleTypes, vehicleTypes);
                 }
 
-                // Fetch paginated categories (main list data)
+                // Fetch categories from new endpoint (all categories, then paginate client-side)
+                const categoriesRes = await api.get<any>('/feature-categories-list/');
+                // Extract categories from response structure: { success, count, categories: [...] }
+                let allCategories: any[] = [];
+                if (Array.isArray(categoriesRes)) {
+                    allCategories = categoriesRes;
+                } else if (categoriesRes.categories && Array.isArray(categoriesRes.categories)) {
+                    allCategories = categoriesRes.categories;
+                } else if (categoriesRes.results && Array.isArray(categoriesRes.results)) {
+                    allCategories = categoriesRes.results;
+                }
+                // Use count from response if available, otherwise use array length
+                const count = categoriesRes.count || allCategories.length;
+                // Client-side pagination
                 const offset = (page - 1) * pageSize;
-                const categoriesRes = await api.get<any>(`/feature-categories/?limit=${pageSize}&offset=${offset}`);
-                const categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
-                const count = categoriesRes.count || categories.length;
+                const categories = allCategories.slice(offset, offset + pageSize);
 
                 setData({ categories, vehicleTypes });
                 setTotalCount(count);
@@ -602,22 +645,40 @@ export function useOptimizedFeatureTypesPageData(page = 1, pageSize = 20) {
                     models = cachedModels;
                 } else {
                     const [categoriesRes, modelsRes] = await Promise.all([
-                        api.get<any>('/feature-categories/?limit=20&offset=0'),
+                        api.get<any>('/feature-categories-list/'),
                         api.get<any>('/vehicle-models/?limit=20&offset=0'),
                     ]);
 
-                    categories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.results || []);
+                    // Extract categories from response structure: { success, count, categories: [...] }
+                    if (Array.isArray(categoriesRes)) {
+                        categories = categoriesRes;
+                    } else if (categoriesRes.categories && Array.isArray(categoriesRes.categories)) {
+                        categories = categoriesRes.categories;
+                    } else if (categoriesRes.results && Array.isArray(categoriesRes.results)) {
+                        categories = categoriesRes.results;
+                    }
                     models = Array.isArray(modelsRes) ? modelsRes : (modelsRes.results || []);
 
                     setCachedData(cacheKeys.categories, categories);
                     setCachedData(cacheKeys.models, models);
                 }
 
-                // Fetch paginated types (main list data)
+                // Fetch types from new endpoint (all types, then paginate client-side)
+                const typesRes = await api.get<any>('/feature-types-list/');
+                // Extract feature types from response structure: { success, count, feature_types: [...] }
+                let allTypes: any[] = [];
+                if (Array.isArray(typesRes)) {
+                    allTypes = typesRes;
+                } else if (typesRes.feature_types && Array.isArray(typesRes.feature_types)) {
+                    allTypes = typesRes.feature_types;
+                } else if (typesRes.results && Array.isArray(typesRes.results)) {
+                    allTypes = typesRes.results;
+                }
+                // Use count from response if available, otherwise use array length
+                const count = typesRes.count || allTypes.length;
+                // Client-side pagination
                 const offset = (page - 1) * pageSize;
-                const typesRes = await api.get<any>(`/feature-types/?limit=${pageSize}&offset=${offset}`);
-                const types = Array.isArray(typesRes) ? typesRes : (typesRes.results || []);
-                const count = typesRes.count || types.length;
+                const types = allTypes.slice(offset, offset + pageSize);
 
                 setData({ types, categories, models });
                 setTotalCount(count);
@@ -962,7 +1023,7 @@ export function usePrefetchCommonData() {
             const prefetchRequests = [
                 { key: 'vehicle-types', url: '/vehicle-types/' },
                 { key: 'vehicle-makers', url: '/vehicle-makers/' },
-                { key: 'feature-categories-parents', url: '/feature-categories/parents/' },
+                { key: 'feature-categories-parents', url: '/feature-categories-list/' },
             ];
 
             for (const req of prefetchRequests) {

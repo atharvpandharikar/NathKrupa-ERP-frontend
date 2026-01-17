@@ -61,6 +61,7 @@ import {
   ChevronsRight,
   Search,
   X,
+  Calendar,
 } from "lucide-react";
 import {
   Pagination,
@@ -243,6 +244,8 @@ export default function Transactions() {
   const [exportAccountId, setExportAccountId] = useState("all");
   const [exportTransactionType, setExportTransactionType] =
     useState<"Both" | "Credit" | "Debit">("Both");
+  const [exportDateFrom, setExportDateFrom] = useState("");
+  const [exportDateTo, setExportDateTo] = useState("");
   const [exportLoading, setExportLoading] = useState(false);
 
   // Convert data to CSV format
@@ -645,11 +648,14 @@ export default function Transactions() {
       if (exportTransactionType !== "Both") {
         params.transaction_type = exportTransactionType;
       }
-      if (filters.dateFrom) {
-        params.from_date = filters.dateFrom;
+      // Use export dialog date filters (or fallback to main filters if not set)
+      const fromDate = exportDateFrom || filters.dateFrom;
+      const toDate = exportDateTo || filters.dateTo;
+      if (fromDate) {
+        params.from_date = fromDate;
       }
-      if (filters.dateTo) {
-        params.to_date = filters.dateTo;
+      if (toDate) {
+        params.to_date = toDate;
       }
 
       // Call the export API to get all transactions
@@ -768,34 +774,153 @@ export default function Transactions() {
         </div>
       </div>
 
-      {/* Search Bar */}
+      {/* Filters Section */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input
-                placeholder="Search transactions by account, purpose, bill number, UTR, vendor, amount, or any field..."
-                value={filters.search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-10 pr-10"
-              />
-              {filters.search && (
-                <button
-                  onClick={() => handleSearchChange('')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label="Clear search"
+          <div className="space-y-4">
+            {/* Filters Header */}
+            <div className="flex items-center gap-2 mb-4">
+              <Filter className="h-5 w-5 text-muted-foreground" />
+              <h2 className="text-lg font-semibold">Filters</h2>
+            </div>
+
+            {/* First Row: Search, Account, Type, Sort */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Search */}
+              <div className="space-y-2">
+                <Label>Search</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                  <Input
+                    placeholder="Search transactions..."
+                    value={filters.search}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              {/* Account */}
+              <div className="space-y-2">
+                <Label>Account</Label>
+                <Select
+                  value={filters.account}
+                  onValueChange={(value) =>
+                    setFilters((prev) => ({ ...prev, account: value }))
+                  }
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Accounts" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Accounts</SelectItem>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id.toString()}>
+                        {account.nickname || account.account_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Type */}
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={filters.type}
+                  onValueChange={(value) =>
+                    setFilters((prev) => ({ ...prev, type: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="Credit">Credit</SelectItem>
+                    <SelectItem value="Debit">Debit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sort */}
+              <div className="space-y-2">
+                <Label>Sort</Label>
+                <Select
+                  value={filters.sort}
+                  onValueChange={(value: TransactionSortOption) =>
+                    setFilters((prev) => ({ ...prev, sort: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="oldest">Oldest First</SelectItem>
+                    <SelectItem value="amount_high">Amount (High to Low)</SelectItem>
+                    <SelectItem value="amount_low">Amount (Low to High)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Second Row: From Date, To Date, Clear All Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* From Date */}
+              <div className="space-y-2">
+                <Label>From Date</Label>
+                <div className="relative">
+                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) =>
+                      setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))
+                    }
+                    className="pr-10"
+                  />
+                </div>
+              </div>
+
+              {/* To Date */}
+              <div className="space-y-2">
+                <Label>To Date</Label>
+                <div className="relative">
+                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) =>
+                      setFilters((prev) => ({ ...prev, dateTo: e.target.value }))
+                    }
+                    className="pr-10"
+                  />
+                </div>
+              </div>
+
+              {/* Clear All Filters Button */}
+              <div className="space-y-2">
+                <Label className="opacity-0">Clear</Label>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFilters({
+                      search: "",
+                      account: "all",
+                      type: "all",
+                      sort: "newest",
+                      dateFrom: "",
+                      dateTo: "",
+                    });
+                  }}
+                  className="w-full"
+                >
+                  Clear All Filters
+                </Button>
+              </div>
             </div>
           </div>
-          {filters.search && (
-            <div className="mt-2 text-sm text-muted-foreground">
-              Searching all transactions for: <span className="font-medium">{filters.search}</span>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -1004,12 +1129,22 @@ export default function Transactions() {
       />
 
       {/* Export Dialog */}
-      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
-        <DialogContent>
+      <Dialog 
+        open={showExportDialog} 
+        onOpenChange={(open) => {
+          setShowExportDialog(open);
+          // Initialize export date filters with current main filters when dialog opens
+          if (open) {
+            setExportDateFrom(filters.dateFrom);
+            setExportDateTo(filters.dateTo);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Export Transactions</DialogTitle>
             <DialogDescription>
-              Export all transactions to CSV or PDF file. Current filters will be applied.
+              Export transactions to CSV or PDF file. Apply filters below to export specific data.
             </DialogDescription>
           </DialogHeader>
 
@@ -1037,41 +1172,77 @@ export default function Transactions() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Account Filter</Label>
-              <Select value={exportAccountId} onValueChange={setExportAccountId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All Accounts" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Accounts</SelectItem>
-                  {accounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id.toString()}>
-                      {account.nickname} ({account.account_type})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Account Filter</Label>
+                <Select value={exportAccountId} onValueChange={setExportAccountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Accounts" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Accounts</SelectItem>
+                    {accounts.map((account) => (
+                      <SelectItem key={account.id} value={account.id.toString()}>
+                        {account.nickname} ({account.account_type})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Transaction Type</Label>
+                <Select value={exportTransactionType} onValueChange={(value: "Both" | "Credit" | "Debit") => setExportTransactionType(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Both">Both</SelectItem>
+                    <SelectItem value="Credit">Credit</SelectItem>
+                    <SelectItem value="Debit">Debit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Transaction Type</Label>
-              <Select value={exportTransactionType} onValueChange={(value: "Both" | "Credit" | "Debit") => setExportTransactionType(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Both">Both</SelectItem>
-                  <SelectItem value="Credit">Credit</SelectItem>
-                  <SelectItem value="Debit">Debit</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>From Date</Label>
+                <div className="relative">
+                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={exportDateFrom}
+                    onChange={(e) => setExportDateFrom(e.target.value)}
+                    className="pr-10"
+                    placeholder="Select start date"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>To Date</Label>
+                <div className="relative">
+                  <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={exportDateTo}
+                    onChange={(e) => setExportDateTo(e.target.value)}
+                    className="pr-10"
+                    placeholder="Select end date"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="text-sm text-muted-foreground">
-              <p>Date filters from the main filters will also be applied.</p>
               {exportFormat === 'pdf' && (
-                <p className="mt-1 text-blue-600">PDF will include a formatted statement with summary.</p>
+                <p className="text-blue-600">PDF will include a formatted statement with summary.</p>
+              )}
+              {(exportDateFrom || exportDateTo || exportAccountId !== "all" || exportTransactionType !== "Both") && (
+                <p className="mt-2 text-green-600">
+                  Export will include transactions filtered by your selected criteria.
+                </p>
               )}
             </div>
           </div>
@@ -1079,7 +1250,14 @@ export default function Transactions() {
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={() => setShowExportDialog(false)}
+              onClick={() => {
+                setShowExportDialog(false);
+                // Reset export filters when canceling
+                setExportDateFrom("");
+                setExportDateTo("");
+                setExportAccountId("all");
+                setExportTransactionType("Both");
+              }}
               disabled={exportLoading}
             >
               Cancel
